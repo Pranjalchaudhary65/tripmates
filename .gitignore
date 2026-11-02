@@ -31,3 +31,18 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Secrets & local overrides — never commit ###
+.env
+.env.*
+!.env.example
+application-local.yml
+application-local.yaml
+uploads/
+*.pem
+*.key
+
+### Frontend ###
+node_modules/
+dist/
+.vite/
