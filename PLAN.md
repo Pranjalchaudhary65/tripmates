@@ -20,7 +20,7 @@ Deadline: 2026-11-30.
 - [x] Major pre-code design pivot applied: platform never holds money (escrow → settlement/IOU model), public meet-up protocol added, 18+/email-uniqueness/match-cache-index corrections
 - [x] `README.md` created with the Business Model section (freemium, no custody of funds) — full architecture/OWASP README content still lands in Step 13
 - [x] Government ID verification removed entirely: selfie-only identity tiers, `LivenessVerifier` interface, selfie retention/purge window, vouching mechanism added
-- [ ] `DECISIONS.md` created, Step 0 entry appended
+- [x] `DECISIONS.md` created, Step 0 entries appended
 
 ## Step 1 — Project skeleton & infra (backend + frontend scaffold)
 - [ ] pom.xml: Spring Data JPA, Spring Security, Validation, PostgreSQL driver,
