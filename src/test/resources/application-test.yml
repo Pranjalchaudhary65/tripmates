@@ -1,0 +1,15 @@
+# Active on every Testcontainers-backed integration test via
+# @ActiveProfiles("test"). spring.datasource.* and spring.data.redis.* are
+# deliberately absent here - TestcontainersConfiguration's @ServiceConnection
+# beans supply the real container host/port/credentials, which take
+# precedence over application.yml's localhost:5433 / .env values. This is
+# why the test suite needs no POSTGRES_PASSWORD/REDIS_PASSWORD set and runs
+# the same in CI as on a dev box.
+spring:
+  flyway:
+    clean-disabled: false # tests are allowed to reset the schema between runs
+
+management:
+  endpoint:
+    health:
+      show-details: always

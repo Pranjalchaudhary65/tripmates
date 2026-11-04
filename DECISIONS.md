@@ -26,3 +26,9 @@ One line per commit: what I built, and the key decision behind it.
   safety feature. Replaced it with selfie-match plus a vouching mechanic
   so verified users can stake some of their own trust score on someone
   else.
+- **Step 1a** — Set up Postgres+PostGIS and Redis in Docker Compose, Flyway V1
+  for extensions, and Testcontainers tests against the real services. Chose
+  `@ServiceConnection` containers over an H2/embedded stand-in because
+  PostGIS, citext and the append-only grants only exist on real Postgres. I
+  also left secrets with no defaults, so a missing password stops startup
+  instead of the app quietly running on a weak value.
