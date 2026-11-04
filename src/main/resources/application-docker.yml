@@ -1,0 +1,16 @@
+# Active only once the backend itself runs as a container inside
+# docker-compose's network, alongside postgres/redis - everything else
+# (credentials, ddl-auto, flyway location, actuator exposure) is inherited
+# from application.yml unchanged; the only thing that differs inside the
+# compose network is that services address each other by service name
+# instead of localhost.
+spring:
+  datasource:
+    # Inside the compose network the container's own internal port (5432)
+    # is still correct here - only the host-side mapping in
+    # docker-compose.yml changed, to dodge a local Postgres already
+    # listening on the host's 5432.
+    url: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+  data:
+    redis:
+      host: redis

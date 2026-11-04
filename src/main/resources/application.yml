@@ -1,0 +1,57 @@
+spring:
+  application:
+    name: tripmate
+
+  config:
+    # Reads the git-ignored .env (KEY=VALUE is valid .properties syntax) so
+    # local runs need no shell exports. "optional:" keeps CI and containers,
+    # which inject real environment variables instead, from failing on a
+    # missing file. Real environment variables still take precedence.
+    import: optional:file:.env[.properties]
+
+  datasource:
+    url: jdbc:postgresql://localhost:5433/${POSTGRES_DB}
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate # never "update" - every schema change goes through Flyway
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  flyway:
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: ${REDIS_PASSWORD}
+
+server:
+  port: ${SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      # show-details: always is only safe because this is a local dev box
+      # nobody but the developer can reach. A DOWN health check with full
+      # details tells an attacker exactly which backing service to go after
+      # (db vs redis) - this must drop to "when-authorized" (admin-only) or
+      # "never" before this app is reachable from anywhere but localhost.
+      show-details: always
+      probes:
+        enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
