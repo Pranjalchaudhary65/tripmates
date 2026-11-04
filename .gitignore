@@ -42,6 +42,14 @@ uploads/
 *.pem
 *.key
 
+### Local-only tooling config ###
+CLAUDE.md
+.claude/
+
+### JVM crash dumps (contain env vars and memory maps) ###
+hs_err_pid*.log
+replay_pid*.log
+
 ### Frontend ###
 node_modules/
 dist/
