@@ -37,11 +37,18 @@ server:
 
 management:
   endpoints:
+    # Deny-by-default for actuator too: every endpoint is switched off, not
+    # just hidden from HTTP, and health is switched back on read-only. A new
+    # endpoint (env, heapdump, loggers) can never appear by accident when a
+    # dependency or Boot upgrade adds one.
+    access:
+      default: none
     web:
       exposure:
-        include: health,info
+        include: health
   endpoint:
     health:
+      access: read-only
       # show-details: always is only safe because this is a local dev box
       # nobody but the developer can reach. A DOWN health check with full
       # details tells an attacker exactly which backing service to go after
@@ -55,3 +62,21 @@ management:
       enabled: true
     readinessstate:
       enabled: true
+
+logging:
+  structured:
+    format:
+      # One JSON object per line (Elastic Common Schema). MDC entries become
+      # top-level fields, which is how correlationId lands on every line
+      # written while a request is being handled.
+      console: ecs
+
+springdoc:
+  # Pinned explicitly - SecurityConfig permits exactly these paths, so they
+  # must not move if a springdoc upgrade changes its defaults.
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+  # Only application endpoints are documented; actuator and /error are not.
+  paths-to-match: /api/v1/**
