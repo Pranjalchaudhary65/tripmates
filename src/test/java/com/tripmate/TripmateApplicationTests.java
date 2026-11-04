@@ -1,14 +1,9 @@
 package com.tripmate;
 
-import com.tripmate.support.TestcontainersConfiguration;
+import com.tripmate.support.IntegrationTest;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
-import org.springframework.test.context.ActiveProfiles;
 
-@SpringBootTest
-@ActiveProfiles("test")
-@Import(TestcontainersConfiguration.class)
+@IntegrationTest
 class TripmateApplicationTests {
 
 	@Test

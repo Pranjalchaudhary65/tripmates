@@ -32,3 +32,9 @@ One line per commit: what I built, and the key decision behind it.
   PostGIS, citext and the append-only grants only exist on real Postgres. I
   also left secrets with no defaults, so a missing password stops startup
   instead of the app quietly running on a weak value.
+- **Step 1b** — Added ProblemDetail error handling, a correlation-ID filter,
+  ECS JSON logging, locked-down actuator, springdoc and the /api/v1 prefix.
+  Chose to rebuild every error body from my own fixed strings over trusting
+  Spring's defaults, and routed security 401/403 and the /error forward into
+  the same handler, so there's one auditable error shape and no exception
+  message can ever reach a client.
