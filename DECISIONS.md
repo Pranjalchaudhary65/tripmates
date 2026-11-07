@@ -38,3 +38,14 @@ One line per commit: what I built, and the key decision behind it.
   Spring's defaults, and routed security 401/403 and the /error forward into
   the same handler, so there's one auditable error shape and no exception
   message can ever reach a client.
+- **Step 1c** — Added security headers (strict CSP, HSTS on every response,
+  nosniff, frame DENY, no-referrer, Permissions-Policy) and an exact-origin
+  CORS allowlist. Chose a separate Swagger UI policy that allows its one
+  inline `<style>` (the logo SVG's CSS) by sha256 hash in `style-src-elem`
+  over `'unsafe-inline'`, and dropped `style-src-attr 'unsafe-inline'` once I
+  confirmed DOMPurify already strips markdown style attributes. My first
+  attempt missed the SVG's inline `<style>`: I'd only read
+  swagger-ui-bundle.js, and the logo lives in the standalone preset. The
+  tests passed, and I only caught it in the browser console, so a test now
+  re-hashes the served scripts and fails when a springdoc upgrade changes
+  the CSS.

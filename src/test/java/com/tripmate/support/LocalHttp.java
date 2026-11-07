@@ -35,6 +35,11 @@ public final class LocalHttp {
         return send(builder, headerNameValuePairs);
     }
 
+    public HttpResponse<String> options(String path, String... headerNameValuePairs) {
+        return send(HttpRequest.newBuilder(URI.create(baseUrl + path))
+                .method("OPTIONS", HttpRequest.BodyPublishers.noBody()), headerNameValuePairs);
+    }
+
     private HttpResponse<String> send(HttpRequest.Builder builder, String... headerNameValuePairs) {
         if (headerNameValuePairs.length > 0) {
             builder.headers(headerNameValuePairs);
