@@ -27,7 +27,6 @@ Deadline: 2026-11-30.
       Flyway, Redis (Lettuce), WebSocket, Spring Mail, Bucket4j, MapStruct,
       Argon2 (Spring Security crypto), Testcontainers (Postgres+Redis), Spring Security Test
 - [x] docker-compose.yml: Postgres+PostGIS, Redis
-- [ ] docker-compose.yml: backend and frontend services
 - [x] application.yml (+ -test, -docker profiles), `.env.example`
 - [x] Flyway baseline migration (extensions: pgcrypto/citext/postgis)
 - [x] Global exception handler, correlation-ID filter, structured JSON logging
@@ -65,6 +64,7 @@ Deadline: 2026-11-30.
 - [ ] Route guards by auth state
 
 ## Step 3c — Slim deploy (backend + frontend + managed Postgres, auth only)
+- [ ] Backend and frontend Dockerfiles; docker-compose.yml backend and frontend services built from them
 - [ ] Deploy backend + frontend to Render/Railway, managed Postgres (PostGIS enabled), managed Redis
 - [ ] Only auth (Steps 1-3b) needs to work end-to-end at this point — a real URL to demo signup/login/2FA/sessions
 - [ ] Redeploy script/workflow established here gets reused after every later step, not rebuilt at Step 13
