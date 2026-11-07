@@ -49,3 +49,13 @@ One line per commit: what I built, and the key decision behind it.
   tests passed, and I only caught it in the browser console, so a test now
   re-hashes the served scripts and fails when a springdoc upgrade changes
   the CSS.
+- **Step 1d** — Scaffolded the Vite + React + TS frontend with Tailwind,
+  Zustand, React Router and an Axios client. Chose a single-flight refresh
+  (concurrent 401s share one refresh promise) on a separate interceptor-free
+  Axios instance over a refresh per failed request, because the server's
+  refresh-token reuse detection would read the second use of a rotated
+  cookie as theft and revoke the session. The access token lives only in the
+  store's closure, and a lint rule bans localStorage/sessionStorage. I pinned
+  minimatch to 11.0.1 with an npm override instead of running `audit fix
+  --force`, since the advisory only touched lint tooling and the forced fix
+  was a downgrade to ESLint 9.
