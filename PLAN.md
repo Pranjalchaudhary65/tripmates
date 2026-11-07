@@ -33,7 +33,7 @@ Deadline: 2026-11-30.
 - [x] Global exception handler, correlation-ID filter, structured JSON logging
 - [x] Actuator health check, OpenAPI (springdoc) wired, `/api/v1` base path
 - [x] Security headers filter (CSP/HSTS/etc.) + CORS allowlist config
-- [ ] Vite + React + TS scaffold, Tailwind, Zustand store shape, React Router skeleton,
+- [x] Vite + React + TS scaffold, Tailwind, Zustand store shape, React Router skeleton,
       Axios instance with silent-refresh interceptor (no screens yet — plumbing only)
 
 ## Step 2a — Identity backend: signup, login, email verify
