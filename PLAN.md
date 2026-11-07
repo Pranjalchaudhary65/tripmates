@@ -23,15 +23,16 @@ Deadline: 2026-11-30.
 - [x] `DECISIONS.md` created, Step 0 entries appended
 
 ## Step 1 — Project skeleton & infra (backend + frontend scaffold)
-- [ ] pom.xml: Spring Data JPA, Spring Security, Validation, PostgreSQL driver,
+- [x] pom.xml: Spring Data JPA, Spring Security, Validation, PostgreSQL driver,
       Flyway, Redis (Lettuce), WebSocket, Spring Mail, Bucket4j, MapStruct,
       Argon2 (Spring Security crypto), Testcontainers (Postgres+Redis), Spring Security Test
-- [ ] docker-compose.yml: Postgres+PostGIS, Redis, backend, frontend
-- [ ] application.yml (+ -test, -docker profiles), `.env.example`
-- [ ] Flyway baseline migration (extensions: pgcrypto/citext/postgis)
-- [ ] Global exception handler, correlation-ID filter, structured JSON logging
-- [ ] Actuator health check, OpenAPI (springdoc) wired, `/api/v1` base path
-- [ ] Security headers filter (CSP/HSTS/etc.) + CORS allowlist config
+- [x] docker-compose.yml: Postgres+PostGIS, Redis
+- [ ] docker-compose.yml: backend and frontend services
+- [x] application.yml (+ -test, -docker profiles), `.env.example`
+- [x] Flyway baseline migration (extensions: pgcrypto/citext/postgis)
+- [x] Global exception handler, correlation-ID filter, structured JSON logging
+- [x] Actuator health check, OpenAPI (springdoc) wired, `/api/v1` base path
+- [x] Security headers filter (CSP/HSTS/etc.) + CORS allowlist config
 - [ ] Vite + React + TS scaffold, Tailwind, Zustand store shape, React Router skeleton,
       Axios instance with silent-refresh interceptor (no screens yet — plumbing only)
 
