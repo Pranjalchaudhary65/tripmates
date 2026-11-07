@@ -78,5 +78,8 @@ springdoc:
     path: /v3/api-docs
   swagger-ui:
     path: /swagger-ui.html
+    # Swagger UI otherwise sends the spec URL to validator.swagger.io for a
+    # badge image - a third-party call the Swagger UI CSP blocks anyway.
+    validator-url: none
   # Only application endpoints are documented; actuator and /error are not.
   paths-to-match: /api/v1/**

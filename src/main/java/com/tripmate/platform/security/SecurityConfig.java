@@ -23,6 +23,8 @@ import org.springframework.web.servlet.HandlerExceptionResolver;
  * below hand the exception to MVC's exception resolver, which routes it to
  * {@code GlobalExceptionHandler} and gives 401/403 the same ProblemDetail
  * body as every other error.
+ *
+ * <p>Response headers come from {@link SecurityHeaders}.
  */
 @Configuration(proxyBeanMethods = false)
 public class SecurityConfig {
@@ -32,6 +34,7 @@ public class SecurityConfig {
             HttpSecurity http,
             @Qualifier("handlerExceptionResolver") HandlerExceptionResolver exceptionResolver) throws Exception {
         http
+                .headers(SecurityHeaders.policy())
                 .authorizeHttpRequests(auth -> auth
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**").permitAll()
