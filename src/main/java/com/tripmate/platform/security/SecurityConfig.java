@@ -2,6 +2,7 @@ package com.tripmate.platform.security;
 
 import jakarta.servlet.DispatcherType;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
@@ -10,6 +11,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.header.HeaderWriterFilter;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
 /**
@@ -24,17 +26,25 @@ import org.springframework.web.servlet.HandlerExceptionResolver;
  * {@code GlobalExceptionHandler} and gives 401/403 the same ProblemDetail
  * body as every other error.
  *
- * <p>Response headers come from {@link SecurityHeaders}.
+ * <p>Response headers come from {@link SecurityHeaders}; CORS from
+ * {@link ApiCorsFilter}, which runs straight after the header writer so a
+ * preflight is answered before any authentication or authorization rule.
  */
 @Configuration(proxyBeanMethods = false)
+@EnableConfigurationProperties(CorsProperties.class)
 public class SecurityConfig {
 
     @Bean
     SecurityFilterChain apiSecurityFilterChain(
             HttpSecurity http,
+            CorsProperties corsProperties,
             @Qualifier("handlerExceptionResolver") HandlerExceptionResolver exceptionResolver) throws Exception {
         http
                 .headers(SecurityHeaders.policy())
+                // Spring's own CORS configurer is switched off so ApiCorsFilter
+                // is the only CORS filter in the chain, whatever beans are added later.
+                .cors(AbstractHttpConfigurer::disable)
+                .addFilterAfter(new ApiCorsFilter(corsProperties, exceptionResolver), HeaderWriterFilter.class)
                 .authorizeHttpRequests(auth -> auth
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**").permitAll()

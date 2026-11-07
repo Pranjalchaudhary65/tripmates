@@ -9,6 +9,10 @@ spring:
   flyway:
     clean-disabled: false # tests are allowed to reset the schema between runs
 
+tripmate:
+  cors:
+    allowed-origins: http://localhost:5173
+
 management:
   endpoint:
     health:
