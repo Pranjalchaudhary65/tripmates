@@ -12,6 +12,16 @@ spring:
 tripmate:
   cors:
     allowed-origins: http://localhost:5173
+  identity:
+    breached-password:
+      # Tests replace the HIBP checker with a stub; this points the real one
+      # at the discard port anyway, so a wiring mistake fails fast instead of
+      # sending anything to the internet.
+      base-url: http://127.0.0.1:9
+      timeout: 1s
+    verification:
+      # Test-only key, never used outside the test profile.
+      hmac-key: dGVzdC1vbmx5LW90cC1obWFjLWtleS1ub3QtZm9yLXByb2R1Y3Rpb24h
 
 management:
   endpoint:
