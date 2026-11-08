@@ -52,6 +52,12 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return respond(HttpStatus.FORBIDDEN);
     }
 
+    @ExceptionHandler(ApiProblemException.class)
+    ResponseEntity<ProblemDetail> handleApiProblem(ApiProblemException ex) {
+        ProblemType type = ex.type();
+        return ResponseEntity.status(type.status()).body(ApiProblems.forType(type));
+    }
+
     @ExceptionHandler(Exception.class)
     ResponseEntity<ProblemDetail> handleUnexpected(Exception ex, HttpServletRequest request) {
         log.error("Unhandled exception on {} {}", request.getMethod(), request.getRequestURI(), ex);

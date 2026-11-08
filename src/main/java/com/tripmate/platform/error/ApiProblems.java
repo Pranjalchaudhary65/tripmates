@@ -5,6 +5,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -19,6 +20,8 @@ public final class ApiProblems {
     public static final String CORRELATION_ID = "correlationId";
 
     public static final String ERRORS = "errors";
+
+    public static final String CODE = "code";
 
     private static final Map<Integer, String> DETAILS = Map.ofEntries(
             Map.entry(400, "The request is malformed or failed validation."),
@@ -47,6 +50,21 @@ public final class ApiProblems {
         String correlationId = CorrelationId.current();
         if (correlationId != null) {
             problem.setProperty(CORRELATION_ID, correlationId);
+        }
+        return problem;
+    }
+
+    /**
+     * A field-level type is also listed under {@code errors}, in the same
+     * shape as a Bean Validation failure, so a client renders it next to the
+     * form input without a second code path.
+     */
+    public static ProblemDetail forType(ProblemType type) {
+        ProblemDetail problem = forStatus(type.status());
+        problem.setDetail(type.detail());
+        problem.setProperty(CODE, type.code());
+        if (type.field() != null) {
+            problem.setProperty(ERRORS, List.of(new FieldViolation(type.field(), type.detail())));
         }
         return problem;
     }
