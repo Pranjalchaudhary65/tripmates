@@ -160,7 +160,7 @@ users
   password_hash           TEXT NOT NULL                -- Argon2id
   full_name               TEXT NOT NULL
   date_of_birth           DATE NOT NULL
-                            CHECK (date_of_birth <= (now() - INTERVAL '18 years'))
+                            CHECK (date_of_birth <= (now() AT TIME ZONE 'Asia/Kolkata')::date - INTERVAL '18 years')
   gender                  VARCHAR(20) NOT NULL CHECK (gender IN ('MALE','FEMALE','NON_BINARY','PREFER_NOT_TO_SAY'))
   phone_ciphertext        BYTEA                         -- AES-GCM envelope-encrypted
   phone_blind_index       VARCHAR(64)                   -- HMAC-SHA256(phone), indexed, for uniqueness/lookup without decrypting
@@ -177,10 +177,20 @@ users
   account_status          VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'
                             CHECK (account_status IN ('ACTIVE','SUSPENDED','BANNED','DELETED'))
   role                    VARCHAR(20) NOT NULL DEFAULT 'USER' CHECK (role IN ('USER','ADMIN'))
-  encryption_key_id       UUID REFERENCES user_encryption_keys(id)
+  encryption_key_id       UUID                          -- nullable; FK below
   created_at              TIMESTAMPTZ NOT NULL DEFAULT now()
   updated_at              TIMESTAMPTZ NOT NULL DEFAULT now()
   deleted_at              TIMESTAMPTZ
+
+  FOREIGN KEY (encryption_key_id, id) REFERENCES user_encryption_keys (id, user_id)
+    -- WHY: users and user_encryption_keys reference each other. The cycle
+    -- is broken by keeping encryption_key_id nullable: the user row is
+    -- inserted first (no key yet), the key row second, and the user row
+    -- updated to point at it. The FK is added by ALTER TABLE after both
+    -- tables exist. Composite rather than encryption_key_id alone, so a
+    -- user can only ever point at a key whose user_id is that same user —
+    -- a single-column FK would accept another user's key id. MATCH SIMPLE
+    -- skips the check while encryption_key_id is NULL.
 
   UNIQUE INDEX idx_users_email_active ON users(email) WHERE deleted_at IS NULL
     -- WHY: a plain column-level UNIQUE would permanently block a
@@ -204,6 +214,19 @@ in a form that a direct API call bypasses. The service layer duplicates
 the check (for a clear, immediate error message); the constraint is the
 backstop if it doesn't. See `THREAT_MODEL.md`.
 
+`now()` is not immutable, and PostgreSQL treats every CHECK as if it were:
+the condition is evaluated only when a row is inserted or updated, never
+re-checked as time passes, and re-evaluated in full when the table is
+reloaded by a dump/restore. That is safe here only because the condition is
+monotonic: a date of birth that is 18+ years in the past stays so forever,
+so a row that passed once passes on every later UPDATE and on every
+restore. (A CHECK like `expires_at > now()` would be the dangerous kind — a
+restore a week later would fail.) "Today" is pinned to IST in the
+constraint, and the service's `AgePolicy` uses the same zone and the same
+`dob <= today - 18 years` arithmetic (which differs from `dob + 18 years`
+on 29 February), so the two never disagree on a boundary day because of the
+session's `TimeZone` setting.
+
 ```sql
 user_encryption_keys
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid()
@@ -213,9 +236,13 @@ user_encryption_keys
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
   revoked_at    TIMESTAMPTZ
 
-  INDEX idx_uek_user_active (user_id) WHERE active
+  UNIQUE (id, user_id)
+    -- WHY: target of the composite FK from users.encryption_key_id.
+  UNIQUE INDEX idx_uek_user_active (user_id) WHERE active
     -- WHY: envelope-decryption of any PII field for a user first fetches
-    -- the one active DEK; this index makes that a single-row lookup.
+    -- the one active DEK; this index makes that a single-row lookup, and
+    -- UNIQUE makes "the" active key unambiguous — two active keys for one
+    -- user would leave it undefined which one encrypts new data.
 ```
 This table is the hook for crypto-shredding: GDPR/DPDP-style deletion sets
 `active = FALSE, revoked_at = now()` and destroys the unwrapped DEK from
@@ -300,11 +327,29 @@ otp_codes
   consumed_at    TIMESTAMPTZ
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 
+  CHECK (max_attempts > 0 AND attempt_count BETWEEN 0 AND max_attempts)
   INDEX idx_otp_user_purpose_active (user_id, purpose) WHERE consumed_at IS NULL
     -- WHY: "is there already a live OTP for this purpose" is checked on
     -- every resend request to enforce the resend throttle; partial index
     -- skips the (large, over time) consumed rows entirely.
 ```
+`code_hash` is HMAC-SHA256 over `user_id|purpose|code` under a server-side
+key (`OTP_HMAC_KEY`), not a plain hash: a six-digit code has only a million
+values, so an unkeyed hash of every one can be computed in under a second
+by anyone holding a copy of the table.
+
+Email verification flow: the `otp_codes.id` of the code just issued is
+returned to the registering client as its `verificationId`, and redeeming
+needs both that id and the emailed code. Issuing a code supersedes (expires)
+the previous one for that user and purpose. Re-registering an address that
+is still unverified replaces its credentials and issues a new code — no one
+has proven ownership yet, so the latest attempt wins — while the id binding
+means a victim who types in a code can only ever verify the registration
+*they* made, never one an attacker made with their own password
+(pre-registration hijacking). A verified address is never touched by a new
+registration; the API answers identically with a random decoy id and the
+owner is emailed a notice. Limits: 5 attempts per code, 10-minute expiry,
+60-second resend cooldown, 5 codes per account per 24 hours.
 
 ```sql
 totp_backup_codes
