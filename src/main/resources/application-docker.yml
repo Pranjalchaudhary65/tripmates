@@ -14,3 +14,5 @@ spring:
   data:
     redis:
       host: redis
+  mail:
+    host: mailpit

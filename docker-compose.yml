@@ -45,6 +45,23 @@ services:
       retries: 10
       start_period: 5s
 
+  mailpit:
+    # Local SMTP sink: accepts every email the app sends and delivers none.
+    # Read them at http://localhost:8025. Bound to 127.0.0.1 because its
+    # inbox holds live verification codes and has no login.
+    image: axllent/mailpit:v1.32.0
+    container_name: tripmate-mailpit
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+    environment:
+      MP_MAX_MESSAGES: 500
+      # Mailpit otherwise reverse-resolves every SMTP client's IP before
+      # greeting it; inside Docker that lookup has no answer and stalls each
+      # connection for seconds, long enough to trip the app's SMTP timeout.
+      MP_SMTP_DISABLE_RDNS: "true"
+
   adminer:
     image: adminer:4.8.1
     container_name: tripmate-adminer
