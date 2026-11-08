@@ -1,5 +1,7 @@
 package com.tripmate.platform.security;
 
+import com.tripmate.identity.controller.RegistrationController;
+import com.tripmate.platform.web.ApiPaths;
 import jakarta.servlet.DispatcherType;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -16,7 +18,8 @@ import org.springframework.web.servlet.HandlerExceptionResolver;
 
 /**
  * Deny-by-default: the only anonymous routes are the health probes, the
- * OpenAPI document and its UI, and the container's internal error dispatch.
+ * OpenAPI document and its UI, the container's internal error dispatch, and
+ * the POST-only sign-up and email-verification routes.
  * Every other path - including /api/v1 paths that do not exist - answers 401,
  * so an anonymous caller cannot probe which endpoints exist.
  *
@@ -34,6 +37,13 @@ import org.springframework.web.servlet.HandlerExceptionResolver;
 @EnableConfigurationProperties(CorsProperties.class)
 public class SecurityConfig {
 
+    /** Sign-up and email verification: reachable before an account or session exists. */
+    static final String[] ANONYMOUS_AUTH_ROUTES = {
+            ApiPaths.V1 + RegistrationController.BASE + RegistrationController.REGISTER,
+            ApiPaths.V1 + RegistrationController.BASE + RegistrationController.VERIFY_EMAIL,
+            ApiPaths.V1 + RegistrationController.BASE + RegistrationController.RESEND_VERIFICATION,
+    };
+
     @Bean
     SecurityFilterChain apiSecurityFilterChain(
             HttpSecurity http,
@@ -50,7 +60,13 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**").permitAll()
                         .requestMatchers(HttpMethod.GET,
                                 "/v3/api-docs", "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, ANONYMOUS_AUTH_ROUTES).permitAll()
                         .anyRequest().authenticated())
+                // CSRF abuses credentials the browser attaches on its own
+                // (cookies). These routes neither read nor set any, so there
+                // is nothing for a cross-site request to ride on. Every other
+                // state-changing route keeps CSRF protection.
+                .csrf(csrf -> csrf.ignoringRequestMatchers(ANONYMOUS_AUTH_ROUTES))
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .logout(AbstractHttpConfigurer::disable)
