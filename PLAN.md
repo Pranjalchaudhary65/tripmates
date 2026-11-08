@@ -36,9 +36,9 @@ Deadline: 2026-11-30.
       Axios instance with silent-refresh interceptor (no screens yet — plumbing only)
 
 ## Step 2a — Identity backend: signup, login, email verify
-- [ ] users, user_encryption_keys, otp_codes tables (Flyway)
-- [ ] Register (Argon2id, breached-password check, Bean Validation DTOs)
-- [ ] Email verify via OTP (hashed, expiring, attempt-limited)
+- [x] users, user_encryption_keys, otp_codes tables (Flyway)
+- [x] Register (Argon2id, breached-password check, Bean Validation DTOs)
+- [x] Email verify via OTP (hashed, expiring, attempt-limited)
 - [ ] Login: identical responses / no enumeration, dummy-hash timing defense
 - [ ] Login rate limiting (Bucket4j, per-IP + per-account), lockout, CAPTCHA hook
 - [ ] login_history table + new-device email alert

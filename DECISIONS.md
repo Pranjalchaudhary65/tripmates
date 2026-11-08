@@ -59,3 +59,15 @@ One line per commit: what I built, and the key decision behind it.
   minimatch to 11.0.1 with an npm override instead of running `audit fix
   --force`, since the advisory only touched lint tooling and the forced fix
   was a downgrade to ESLint 9.
+- **Step 2a (first half)** — Built the identity tables, registration and
+  email verification by OTP. Chose a nullable `users.encryption_key_id` with
+  a composite foreign key over a deferrable constraint, because a user really
+  does exist before their first key and the composite key stops a row
+  pointing at another user's key. I kept the 18+ CHECK in the database as
+  well as the service, pinned to IST, since the condition only gets easier to
+  satisfy over time and so survives updates and restores. Verification needs
+  the `verificationId` returned to the registering client plus the emailed
+  code, not the code alone, so an attacker who pre-registers someone's email
+  can't get the victim to verify the attacker's account. The breach check
+  fails open, because an outage at Have I Been Pwned shouldn't stop all
+  sign-ups.
