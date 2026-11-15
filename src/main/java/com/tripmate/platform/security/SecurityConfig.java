@@ -1,5 +1,6 @@
 package com.tripmate.platform.security;
 
+import com.tripmate.identity.controller.LoginController;
 import com.tripmate.identity.controller.RegistrationController;
 import com.tripmate.platform.web.ApiPaths;
 import jakarta.servlet.DispatcherType;
@@ -19,7 +20,7 @@ import org.springframework.web.servlet.HandlerExceptionResolver;
 /**
  * Deny-by-default: the only anonymous routes are the health probes, the
  * OpenAPI document and its UI, the container's internal error dispatch, and
- * the POST-only sign-up and email-verification routes.
+ * the POST-only sign-up, email-verification and login routes.
  * Every other path - including /api/v1 paths that do not exist - answers 401,
  * so an anonymous caller cannot probe which endpoints exist.
  *
@@ -37,8 +38,9 @@ import org.springframework.web.servlet.HandlerExceptionResolver;
 @EnableConfigurationProperties(CorsProperties.class)
 public class SecurityConfig {
 
-    /** Sign-up and email verification: reachable before an account or session exists. */
+    /** Sign-up, email verification and login: reachable before an account or session exists. */
     static final String[] ANONYMOUS_AUTH_ROUTES = {
+            ApiPaths.V1 + LoginController.BASE + LoginController.LOGIN,
             ApiPaths.V1 + RegistrationController.BASE + RegistrationController.REGISTER,
             ApiPaths.V1 + RegistrationController.BASE + RegistrationController.VERIFY_EMAIL,
             ApiPaths.V1 + RegistrationController.BASE + RegistrationController.RESEND_VERIFICATION,
@@ -63,9 +65,11 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, ANONYMOUS_AUTH_ROUTES).permitAll()
                         .anyRequest().authenticated())
                 // CSRF abuses credentials the browser attaches on its own
-                // (cookies). These routes neither read nor set any, so there
-                // is nothing for a cross-site request to ride on. Every other
-                // state-changing route keeps CSRF protection.
+                // (cookies). These routes take no session cookie. The one
+                // cookie login reads, the device cookie, is SameSite=Strict, so
+                // a browser never attaches it to a request another site starts:
+                // there is nothing for a cross-site request to ride on. Every
+                // other state-changing route keeps CSRF protection.
                 .csrf(csrf -> csrf.ignoringRequestMatchers(ANONYMOUS_AUTH_ROUTES))
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)

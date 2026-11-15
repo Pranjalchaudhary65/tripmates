@@ -100,6 +100,15 @@ public class User {
         return emailVerifiedAt == null && accountStatus == AccountStatus.ACTIVE && deletedAt == null;
     }
 
+    /** Not suspended, banned or deleted. */
+    public boolean isActive() {
+        return accountStatus == AccountStatus.ACTIVE && deletedAt == null;
+    }
+
+    public boolean isEmailVerified() {
+        return emailVerifiedAt != null;
+    }
+
     public void replacePendingRegistration(String passwordHash, String fullName,
                                            LocalDate dateOfBirth, Gender gender, Instant now) {
         if (!isPendingEmailVerification()) {

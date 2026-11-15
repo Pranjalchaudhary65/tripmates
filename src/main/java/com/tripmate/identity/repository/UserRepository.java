@@ -28,4 +28,8 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select u from User u where u.id = :id")
     Optional<User> findByIdForUpdate(@Param("id") UUID id);
+
+    /** Unlocked read for login, which changes nothing on the user row. Case-insensitive like the locking variant. */
+    @Query("select u from User u where u.email = :email and u.deletedAt is null")
+    Optional<User> findLiveByEmail(@Param("email") String email);
 }

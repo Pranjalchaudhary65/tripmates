@@ -57,6 +57,16 @@ public class IdentityMailListener {
         }
     }
 
+    @Async
+    @TransactionalEventListener
+    public void on(NewDeviceLoginEvent event) {
+        try {
+            mailer.sendNewDeviceAlert(event);
+        } catch (MailException e) {
+            log.warn("New-device alert could not be sent: {}", causeChain(e));
+        }
+    }
+
     /**
      * Exception class names only, outermost first, e.g.
      * {@code MailSendException > MessagingException > ConnectException}.
