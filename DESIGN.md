@@ -393,18 +393,82 @@ login_history
   user_id         UUID REFERENCES users(id)        -- nullable: failed login with unknown email still logged
   email_attempted CITEXT NOT NULL
   ip_address      INET NOT NULL
-  user_agent      TEXT
+  user_agent      TEXT                             -- truncated to 512 chars; client-controlled
+  device_id_hash  VARCHAR(64)                      -- SHA-256 of the device cookie, see below
   success         BOOLEAN NOT NULL
-  failure_reason  VARCHAR(30)
+  failure_reason  VARCHAR(30) CHECK (failure_reason IN ('UNKNOWN_EMAIL','BAD_PASSWORD',
+                    'EMAIL_NOT_VERIFIED','ACCOUNT_DISABLED','LOCKED','CAPTCHA_FAILED'))
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 
+  CHECK (success = (failure_reason IS NULL))
+  CHECK (NOT success OR user_id IS NOT NULL)
   INDEX idx_login_history_user_time (user_id, created_at DESC)
-    -- WHY: "show my login history" and the new-device-alert check both
-    -- want the most recent rows for a user, newest first.
+    -- WHY: "show my login history" wants the most recent rows for a user,
+    -- newest first.
   INDEX idx_login_history_ip_time (ip_address, created_at)
-    -- WHY: per-IP rate limiting / lockout queries count recent failures
-    -- by IP across all accounts (credential-stuffing detection).
+    -- WHY: reviewing recent failures by IP across all accounts
+    -- (credential-stuffing detection). Live rate limiting does not query
+    -- this table; its counters are in Redis, see "Login" below.
+  INDEX idx_login_history_user_device (user_id, device_id_hash) WHERE success
+    -- WHY: "has this browser signed in to this account before" decides both
+    -- the new-device alert and whether the browser gets its own lockout
+    -- counter; it is asked on every login that presents a device cookie.
 ```
+`device_id_hash` was added during the login build. The columns first designed
+for this table could not answer "is this a new device": `user_agent` alone
+gives false alerts on every browser update, and an attacker who copies the
+victim's User-Agent string gets no alert at all. A random 256-bit device ID
+in an `HttpOnly; Secure; SameSite=Strict` cookie (path `/api/v1/auth`,
+400 days) is something an attacker cannot copy without already owning the
+victim's browser. Only its SHA-256 is stored; with 256 random bits there is
+no small candidate set to hash and compare, so a key is not needed (unlike
+the six-digit OTPs above).
+
+**Login.** An unknown email, a wrong password, an unverified email, a
+disabled account and a locked account all get the same `401
+invalid_credentials` with the same headers. Each does the same work in the
+same order: one account lookup, one lockout charge, and exactly one
+Argon2id verification (against a dummy hash made with the same encoder when
+the email has no account, and against the real hash even when the account is
+locked). `login_history` alone records which case it was. No token or session
+is issued yet; a success returns `{userId, verificationTier}` and the device
+cookie.
+
+Every counter is keyed on SHA-256 of the lower-cased typed email, not on the
+account, so an email with no account is rate-limited, asked for a CAPTCHA and
+"locked" on exactly the same schedule as one that has an account. A browser
+whose device cookie already has a successful login to this account gets its
+own counter key (`email-hash:device:device-hash`) instead of the shared one.
+That is what keeps lockout from becoming a weapon: someone guessing from
+elsewhere can lock the account for unknown browsers, but not for the
+victim's own browser.
+
+- **Rate limits** (Bucket4j token buckets in Redis, continuous refill):
+  login 20 per 10 min per IP and 10 per 10 min per email; register 10 per
+  hour, verify-email 20 per 10 min and resend 10 per hour, per IP. IPv6 is
+  counted per /64. Over the limit gives `429` + `Retry-After`, in the usual
+  RFC 9457 body.
+- **CAPTCHA**: after 3 consecutive failures on a counter key, the
+  `CaptchaVerifier` must accept the request's `captchaToken`, or it gets
+  `401 captcha_required`. A refused CAPTCHA is not charged as a failure. The
+  default provider (`none`) accepts everything.
+- **Lockout**: each attempt is charged *before* its password is checked,
+  atomically in a Redis Lua script, so parallel guesses cannot get past the
+  count. The attempt that brings the count to 5 arms a 1-minute lock; each
+  further failure (once the lock has ended) doubles it: 2, 4, 8 minutes,
+  capped at 15. Attempts refused while locked are not counted, so the lock
+  cannot be held at the cap by one request a minute. A success clears the
+  count, and the count is dropped 24 hours after the last failure.
+- **Redis unavailable**: login, register, verify-email and resend fail
+  **closed** with `503` + `Retry-After`. These limits are the main defence
+  against guessing, and from token issuing onwards sessions live in Redis
+  anyway.
+- **Client IP**: Tomcat's RemoteIpValve, used only for proxies listed in
+  `TRUSTED_PROXIES` (empty means trust no one), reading `X-Forwarded-For`
+  from the right. Application code never reads the header itself.
+- **New-device alert**: a successful login whose device hash has no earlier
+  success for that user emails the owner (time in IST and IP, deliberately
+  no User-Agent). The account's very first sign-in is not alerted.
 
 ```sql
 active_sessions

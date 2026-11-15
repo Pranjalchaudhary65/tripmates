@@ -71,3 +71,17 @@ One line per commit: what I built, and the key decision behind it.
   can't get the victim to verify the attacker's account. The breach check
   fails open, because an outage at Have I Been Pwned shouldn't stop all
   sign-ups.
+- **Step 2a (second half)** — Built login with Bucket4j limits per IP and
+  per email, a backoff lockout, a CAPTCHA hook and `login_history` with a
+  new-device alert. Every refusal is one identical 401 that runs one Argon2id
+  check, against a dummy hash when the email is unknown, and the counters are
+  keyed on a hash of the typed email, so neither the body, the timing nor a
+  429 reveals whether an account exists. I chose a Redis Lua script that
+  counts the failure before the password is checked over read-then-increment,
+  so parallel guesses can't slip past the threshold. I keyed lockout per
+  account and per known device cookie over per account alone, so an attacker
+  failing on purpose can't lock the owner's own browser out. Login fails
+  closed with a 503 when Redis is down, because the limits are the main
+  defence against guessing, and the client IP comes only from Tomcat's
+  RemoteIpValve trusting configured proxies, never from a raw
+  X-Forwarded-For.
