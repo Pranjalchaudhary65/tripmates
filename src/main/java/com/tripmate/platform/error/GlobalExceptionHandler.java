@@ -58,6 +58,14 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(type.status()).body(ApiProblems.forType(type));
     }
 
+    @ExceptionHandler(RetryLaterException.class)
+    ResponseEntity<ProblemDetail> handleRetryLater(RetryLaterException ex) {
+        ProblemType type = ex.type();
+        return ResponseEntity.status(type.status())
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(ex.retryAfterSeconds()))
+                .body(ApiProblems.forType(type));
+    }
+
     @ExceptionHandler(Exception.class)
     ResponseEntity<ProblemDetail> handleUnexpected(Exception ex, HttpServletRequest request) {
         log.error("Unhandled exception on {} {}", request.getMethod(), request.getRequestURI(), ex);
