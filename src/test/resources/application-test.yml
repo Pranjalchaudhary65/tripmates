@@ -9,6 +9,13 @@ spring:
   flyway:
     clean-disabled: false # tests are allowed to reset the schema between runs
 
+server:
+  tomcat:
+    remoteip:
+      # Tests call the server over loopback and act as the reverse proxy:
+      # LocalHttp sends X-Forwarded-For, so each test can be its own client IP.
+      internal-proxies: '127\.0\.0\.1|0:0:0:0:0:0:0:1'
+
 tripmate:
   cors:
     allowed-origins: http://localhost:5173

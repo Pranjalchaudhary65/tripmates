@@ -28,6 +28,8 @@ public final class MailpitClient {
 
     public static final String EXISTING_ACCOUNT_SUBJECT = "Someone tried to sign up with your email";
 
+    public static final String NEW_DEVICE_SUBJECT = "New sign-in to your TripMates account";
+
     private static final Pattern CODE = Pattern.compile("verification code is: (\\d{6})");
 
     private static final Duration TIMEOUT = Duration.ofSeconds(15);
@@ -64,6 +66,15 @@ public final class MailpitClient {
 
     public void awaitSubject(String address, String subject) {
         await().atMost(TIMEOUT).until(() -> countWithSubject(address, subject) >= 1);
+    }
+
+    /** Plain-text body of the newest message to {@code address} with this subject. */
+    public String latestText(String address, String subject) {
+        List<String> ids = search(address).read("$.messages[?(@.Subject == '" + subject + "')].ID");
+        if (ids.isEmpty()) {
+            throw new AssertionError("No message to " + address + " with subject " + subject);
+        }
+        return JsonPath.parse(get("/api/v1/message/" + ids.getFirst())).read("$.Text");
     }
 
     public long countWithSubject(String address, String subject) {
