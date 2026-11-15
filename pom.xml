@@ -102,6 +102,12 @@
 			<artifactId>bucket4j-core</artifactId>
 			<version>${bucket4j.version}</version>
 		</dependency>
+		<dependency>
+			<!-- Redis-backed buckets; runs on the Lettuce client spring-boot-starter-data-redis already provides -->
+			<groupId>com.bucket4j</groupId>
+			<artifactId>bucket4j-redis</artifactId>
+			<version>${bucket4j.version}</version>
+		</dependency>
 
 		<!-- DTO <-> entity mapping -->
 		<dependency>
