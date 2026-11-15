@@ -39,9 +39,9 @@ Deadline: 2026-11-30.
 - [x] users, user_encryption_keys, otp_codes tables (Flyway)
 - [x] Register (Argon2id, breached-password check, Bean Validation DTOs)
 - [x] Email verify via OTP (hashed, expiring, attempt-limited)
-- [ ] Login: identical responses / no enumeration, dummy-hash timing defense
-- [ ] Login rate limiting (Bucket4j, per-IP + per-account), lockout, CAPTCHA hook
-- [ ] login_history table + new-device email alert
+- [x] Login: identical responses / no enumeration, dummy-hash timing defense
+- [x] Login rate limiting (Bucket4j, per-IP + per-account), lockout, CAPTCHA hook
+- [x] login_history table + new-device email alert
 
 ## Step 2b — Identity frontend: signup/login screens
 - [ ] Signup, login, email-verify-pending screens; client + server validation
