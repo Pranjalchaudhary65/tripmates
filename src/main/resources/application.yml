@@ -53,9 +53,28 @@ spring:
       host: localhost
       port: 6379
       password: ${REDIS_PASSWORD}
+      # Login is refused while Redis is unreachable (rate limits and lockout
+      # live there), so an outage has to surface in seconds, not after
+      # Lettuce's 60-second default.
+      timeout: 2s
+      connect-timeout: 2s
 
 server:
   port: ${SERVER_PORT:8080}
+  # Tomcat's RemoteIpValve replaces the socket address with the client
+  # address from X-Forwarded-For, but only when the socket peer matches
+  # internal-proxies, and only from the right-hand end of the header (the
+  # entries our own proxy appended, which a client cannot forge). Set
+  # explicitly so a cloud platform auto-detected by Boot cannot switch it on
+  # with Tomcat's default list of every private range.
+  forward-headers-strategy: native
+  tomcat:
+    remoteip:
+      # Proxy addresses (CIDR list, or a regex) whose X-Forwarded-For is
+      # believed. Empty trusts no one: the header is ignored and the socket
+      # address is used.
+      internal-proxies: ${TRUSTED_PROXIES:}
+      remote-ip-header: x-forwarded-for
 
 tripmate:
   cors:
@@ -66,6 +85,13 @@ tripmate:
 
   mail:
     from: ${MAIL_FROM:TripMates <no-reply@tripmate.local>}
+
+  rate-limit:
+    # Longest a single bucket call to Redis may take before the request is
+    # refused with 503.
+    store-timeout: 2s
+    # Retry-After sent with that 503.
+    unavailable-retry-after: 30s
 
   identity:
     breached-password:
@@ -78,6 +104,39 @@ tripmate:
       max-codes-per-day: 5
       # No default: codes must never be hashed under a guessable key.
       hmac-key: ${OTP_HMAC_KEY}
+    login:
+      # Consecutive failures on one account before a CAPTCHA is demanded.
+      captcha-after-failures: 3
+      lockout:
+        # The attempt that reaches after-failures locks for base-duration;
+        # each further failure doubles it, up to max-duration. A success
+        # resets the count, and it is forgotten failure-window after the
+        # last failure.
+        after-failures: 5
+        base-duration: 1m
+        max-duration: 15m
+        failure-window: 24h
+    captcha:
+      # "none" accepts every request. A real provider registers its own
+      # CaptchaVerifier under another value; an unknown value stops startup.
+      provider: none
+    rate-limit:
+      # Token buckets, refilled continuously: capacity requests per period.
+      login-per-ip:
+        capacity: 20
+        period: 10m
+      login-per-account:
+        capacity: 10
+        period: 10m
+      register-per-ip:
+        capacity: 10
+        period: 1h
+      verify-email-per-ip:
+        capacity: 20
+        period: 10m
+      resend-per-ip:
+        capacity: 10
+        period: 1h
 
 management:
   endpoints:
