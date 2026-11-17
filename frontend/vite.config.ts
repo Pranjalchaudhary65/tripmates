@@ -27,6 +27,17 @@ export default defineConfig(({ command, mode }) => {
       environment: 'node',
       include: ['src/**/*.test.{ts,tsx}'],
       restoreMocks: true,
+      // A fixed, unroutable API origin for every test, so the shared client
+      // can be imported without a developer's .env.local and MSW decides
+      // every response. Nothing in a test can reach a real backend.
+      env: {
+        VITE_API_BASE_URL: 'http://api.test/api/v1',
+      },
+      // jsdom enforces CORS, so DOM tests run from the dev origin the
+      // backend allows; src/test/apiServer.ts mocks the matching headers.
+      environmentOptions: {
+        jsdom: { url: 'http://localhost:5173/' },
+      },
     },
   };
 });
