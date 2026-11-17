@@ -3,6 +3,7 @@ package com.tripmate.platform.security;
 import com.tripmate.platform.logging.CorrelationId;
 import com.tripmate.support.IntegrationTest;
 import com.tripmate.support.LocalHttp;
+import com.tripmate.support.ProblemScenarioController;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -10,7 +11,9 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 
 import java.net.http.HttpResponse;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 
 import static com.tripmate.support.ProblemScenarioController.BASE;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -102,8 +105,30 @@ class CorsIntegrationTest {
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.headers().firstValue("Access-Control-Allow-Origin")).hasValue(ALLOWED_ORIGIN);
         assertThat(response.headers().firstValue("Access-Control-Allow-Credentials")).hasValue("true");
-        assertThat(response.headers().firstValue("Access-Control-Expose-Headers")).hasValue(CorrelationId.HEADER);
+        assertThat(exposedHeaders(response)).contains(CorrelationId.HEADER.toLowerCase(Locale.ROOT));
         assertThat(response.headers().firstValue(CorrelationId.HEADER)).isPresent();
+    }
+
+    /** The login screen counts down from Retry-After; a browser hides the header unless it is exposed. */
+    @Test
+    void rateLimitedResponseExposesRetryAfterToTheAllowedOrigin() {
+        HttpResponse<String> response = record(http.get(BASE + "/rate-limited", "Origin", ALLOWED_ORIGIN));
+
+        assertThat(response.statusCode()).isEqualTo(429);
+        assertThat(response.headers().firstValue("Access-Control-Allow-Origin")).hasValue(ALLOWED_ORIGIN);
+        assertThat(response.headers().firstValue("Access-Control-Allow-Credentials")).hasValue("true");
+        assertThat(response.headers().firstValue("Retry-After"))
+                .hasValue(Long.toString(ProblemScenarioController.RATE_LIMITED_RETRY_AFTER_SECONDS));
+        assertThat(exposedHeaders(response)).containsExactlyInAnyOrder(
+                CorrelationId.HEADER.toLowerCase(Locale.ROOT), "retry-after");
+    }
+
+    @Test
+    void rejectedOriginIsNotToldWhichHeadersAreExposed() {
+        HttpResponse<String> response = record(http.get(BASE + "/rate-limited", "Origin", EVIL_ORIGIN));
+
+        assertRejected(response);
+        assertThat(response.headers().firstValue("Access-Control-Expose-Headers")).isEmpty();
     }
 
     /** The React app's refresh interceptor can only see a 401 if the 401 is CORS-readable. */
@@ -146,6 +171,15 @@ class CorsIntegrationTest {
 
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.headers().firstValue("Access-Control-Allow-Origin")).isEmpty();
+    }
+
+    /** Header names are case-insensitive and may arrive as one comma-separated value or several. */
+    private static List<String> exposedHeaders(HttpResponse<String> response) {
+        return response.headers().allValues("Access-Control-Expose-Headers").stream()
+                .flatMap(value -> Arrays.stream(value.split(",")))
+                .map(String::strip)
+                .map(name -> name.toLowerCase(Locale.ROOT))
+                .toList();
     }
 
     private HttpResponse<String> preflight(String path, String origin, String method, String requestHeaders) {

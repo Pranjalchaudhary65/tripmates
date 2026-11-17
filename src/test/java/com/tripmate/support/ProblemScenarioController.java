@@ -1,5 +1,7 @@
 package com.tripmate.support;
 
+import com.tripmate.platform.error.RetryLaterException;
+import com.tripmate.platform.ratelimit.RateLimitProblem;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.Map;
 
 /**
@@ -32,6 +35,8 @@ import java.util.Map;
 public class ProblemScenarioController {
 
     public static final String BASE = "/api/v1/test/problems";
+
+    public static final long RATE_LIMITED_RETRY_AFTER_SECONDS = 42;
 
     /** Looks like the internals a careless handler would leak; must never appear in a response. */
     public static final String LEAK_SENTINEL =
@@ -53,6 +58,12 @@ public class ProblemScenarioController {
     @GetMapping("/send-error")
     void sendError(HttpServletResponse response) throws IOException {
         response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
+    }
+
+    @GetMapping("/rate-limited")
+    Map<String, String> rateLimited() {
+        throw new RetryLaterException(RateLimitProblem.RATE_LIMITED,
+                Duration.ofSeconds(RATE_LIMITED_RETRY_AFTER_SECONDS));
     }
 
     @GetMapping("/forbidden")
