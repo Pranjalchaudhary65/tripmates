@@ -21,6 +21,16 @@ describe('routes', () => {
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Travel with strangers you can trust');
   });
 
+  it.each([
+    ['/signup', 'Create your account'],
+    ['/verify-email', 'Verify your email'],
+    ['/login', 'Log in'],
+  ])('renders %s', (path, heading) => {
+    renderAt(path);
+
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(heading);
+  });
+
   it('renders the not-found page for an unknown path', () => {
     renderAt('/no/such/page');
 
