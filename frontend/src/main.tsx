@@ -10,7 +10,7 @@ const router = createAppRouter();
 
 installAuthInterceptors(apiClient, {
   onSessionExpired: () => {
-    void router.navigate('/', { replace: true });
+    void router.navigate('/login', { replace: true });
   },
 });
 
