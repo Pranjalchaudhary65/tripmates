@@ -44,9 +44,9 @@ Deadline: 2026-11-30.
 - [x] login_history table + new-device email alert
 
 ## Step 2b — Identity frontend: signup/login screens
-- [ ] Signup, login, email-verify-pending screens; client + server validation
-- [ ] Loading/error/empty states; generic error display (no raw API errors)
-- [ ] Zustand auth store wired to real endpoints from 2a
+- [x] Signup, login, email-verify-pending screens; client + server validation
+- [x] Loading/error/empty states; generic error display (no raw API errors)
+- [x] Zustand auth store wired to real endpoints from 2a
 
 ## Step 3a — JWT, refresh rotation, sessions, 2FA backend
 - [ ] Access token (15 min) + refresh token rotation with reuse detection
