@@ -46,6 +46,14 @@ public class ApiCorsFilter extends CorsFilter {
     private static final List<String> ALLOWED_HEADERS =
             List.of(HttpHeaders.AUTHORIZATION, HttpHeaders.CONTENT_TYPE, CorrelationId.HEADER);
 
+    /**
+     * Response headers page scripts may read. A browser hides every
+     * non-safelisted header from cross-origin JavaScript unless it is listed
+     * here: the correlation ID so a user can quote it, and Retry-After so the
+     * client can say how long a 429 or 503 lasts instead of guessing.
+     */
+    private static final List<String> EXPOSED_HEADERS = List.of(CorrelationId.HEADER, HttpHeaders.RETRY_AFTER);
+
     private static final Duration PREFLIGHT_CACHE = Duration.ofHours(1);
 
     public ApiCorsFilter(CorsProperties properties, HandlerExceptionResolver exceptionResolver) {
@@ -58,7 +66,7 @@ public class ApiCorsFilter extends CorsFilter {
         api.setAllowedOrigins(properties.allowedOrigins());
         api.setAllowedMethods(ALLOWED_METHODS);
         api.setAllowedHeaders(ALLOWED_HEADERS);
-        api.setExposedHeaders(List.of(CorrelationId.HEADER));
+        api.setExposedHeaders(EXPOSED_HEADERS);
         api.setAllowCredentials(true);
         api.setMaxAge(PREFLIGHT_CACHE);
 
