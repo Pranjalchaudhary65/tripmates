@@ -85,3 +85,13 @@ One line per commit: what I built, and the key decision behind it.
   defence against guessing, and the client IP comes only from Tomcat's
   RemoteIpValve trusting configured proxies, never from a raw
   X-Forwarded-For.
+- **Step 2b** — Built the signup, verify-email and login screens on a Zustand
+  store wired to the real identity endpoints. Chose to keep the login result
+  in a separate confirmedCredentials field over faking a token or user,
+  because login issues no session until 3a and route guards must never trust
+  one the server didn't create. Kept the verificationId in memory only over
+  putting it in the URL, since it's half of the pre-registration-hijack
+  defence; a reload means signing up again, which the backend supports.
+  Showed server wording only for an allowlist of problem codes over
+  rendering detail directly, so no unreviewed server text reaches users, and
+  exposed Retry-After through CORS so a 429 shows the real wait.
