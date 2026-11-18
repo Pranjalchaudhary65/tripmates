@@ -31,9 +31,10 @@ export interface PendingVerification {
 }
 
 /**
- * The login endpoint accepted the email and password. It issues no token,
- * so this is not a session: it grants nothing on any other request, and
- * route guards look at accessToken and user, never at this.
+ * The login endpoint accepted the email and password. The store does not
+ * keep the session that login opens, so this is not a session: it grants
+ * nothing on any other request, and route guards look at accessToken and
+ * user, never at this.
  */
 export interface ConfirmedCredentials {
   userId: string;
@@ -72,11 +73,8 @@ const NO_PENDING_VERIFICATION: ApiFailure = {
  * persist middleware: localStorage and sessionStorage are readable by any
  * script on the page, so a single XSS bug would hand over a reusable token.
  *
- * A page reload therefore starts empty. Once the refresh endpoint exists,
- * the httpOnly refresh cookie restores the session through the silent
- * refresh interceptor. Until then nothing is restored and nothing is
- * requested on load: the app never calls an endpoint the backend does not
- * have.
+ * A page reload therefore starts empty, and nothing is requested on load:
+ * the session is not restored from the httpOnly refresh cookie at start-up.
  */
 export const useAuthStore = create<AuthState>()((set, get) => ({
   accessToken: null,

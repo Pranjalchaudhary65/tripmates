@@ -23,7 +23,12 @@ export interface VerificationChallenge {
   message: string;
 }
 
-/** LoginResponse. The credential check passed; no token or session comes with it. */
+/**
+ * Who signed in, read from LoginResponse.session.user. The response also
+ * opens a session (an access token in the body, a refresh cookie the browser
+ * keeps); this client does not adopt it, so no access token from login is
+ * ever stored.
+ */
 export interface LoginResult {
   userId: string;
   verificationTier: VerificationTier;
@@ -37,8 +42,7 @@ export interface LoginBody {
 /**
  * Every call opts out of the silent-refresh interceptor. A 401 from login
  * means wrong credentials, not an expired access token, and none of these
- * routes takes a token, so refreshing could never change the answer. It
- * would also send a refresh request to an endpoint that does not exist yet.
+ * routes takes a token, so refreshing could never change the answer.
  */
 const NO_REFRESH = { skipAuthRefresh: true } as const;
 
@@ -81,12 +85,19 @@ function readChallenge(body: unknown): VerificationChallenge {
   throw new Error('Unexpected verification challenge response.');
 }
 
+/**
+ * Only status AUTHENTICATED is understood. Any other status is a step this
+ * client cannot complete, such as a second factor, and is reported as an
+ * unexpected response rather than treated as a sign-in.
+ */
 function readLoginResult(body: unknown): LoginResult {
-  if (isRecord(body) && isNonEmptyString(body['userId'])) {
-    const tier = body['verificationTier'];
+  const session = isRecord(body) && body['status'] === 'AUTHENTICATED' ? body['session'] : undefined;
+  const user = isRecord(session) ? session['user'] : undefined;
+  if (isRecord(user) && isNonEmptyString(user['id'])) {
+    const tier = user['verificationTier'];
     const known = VERIFICATION_TIERS.find((candidate) => candidate === tier);
     if (known !== undefined) {
-      return { userId: body['userId'], verificationTier: known };
+      return { userId: user['id'], verificationTier: known };
     }
   }
   throw new Error('Unexpected login response.');
