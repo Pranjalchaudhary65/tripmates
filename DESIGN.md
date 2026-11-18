@@ -111,7 +111,7 @@ dependencies.
 
 | Module | Owns tables | Depends on |
 |---|---|---|
-| `identity` | users, user_encryption_keys, identity_verifications, vouches, otp_codes, totp_backup_codes, refresh_token_families, login_history, active_sessions | — (foundation) |
+| `identity` | users, user_encryption_keys, identity_verifications, vouches, otp_codes, totp_backup_codes, refresh_token_families, login_history | — (foundation) |
 | `vibe` | vibe_profiles, deal_breakers | identity |
 | `trips` | trips, trip_members, match_score_cache | identity, vibe |
 | `chat` | conversations, chat_messages, moderation_flags | identity, trips |
@@ -364,28 +364,76 @@ totp_backup_codes
 
 ```sql
 refresh_token_families
-  id            UUID PRIMARY KEY DEFAULT gen_random_uuid()
-  user_id       UUID NOT NULL REFERENCES users(id)
-  device_name   TEXT
-  ip_address    INET
-  user_agent    TEXT
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
-  revoked_at    TIMESTAMPTZ
-  revoked_reason VARCHAR(30) CHECK (revoked_reason IN ('LOGOUT','REUSE_DETECTED','REVOKE_ALL_DEVICES','ADMIN'))
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid()
+  user_id          UUID NOT NULL REFERENCES users(id)
+  device_name      VARCHAR(64) NOT NULL   -- server-derived label ("Firefox on Linux") from a fixed vocabulary, never client text
+  ip_address       INET NOT NULL          -- where the session was signed in
+  user_agent       TEXT                   -- truncated to 512 chars; client-controlled, stored for audit, never returned
+  last_ip_address  INET NOT NULL          -- where the newest refresh came from
+  last_used_at     TIMESTAMPTZ NOT NULL   -- sign-in or newest refresh
+  expires_at       TIMESTAMPTZ NOT NULL   -- created_at + 30 days, absolute: rotation never extends it
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+  revoked_at       TIMESTAMPTZ
+  revoked_reason   VARCHAR(30) CHECK (revoked_reason IN ('LOGOUT','REUSE_DETECTED','REVOKE_ALL_DEVICES','ADMIN'))
 
+  CHECK ((revoked_at IS NULL) = (revoked_reason IS NULL))
+  CHECK (expires_at > created_at)
   INDEX idx_rtf_user_active (user_id) WHERE revoked_at IS NULL
     -- WHY: "revoke all devices" and "list my active sessions" both need
     -- every live family for a user; partial index excludes dead families.
 ```
-The **current** refresh-token hash for a family lives in Redis
-(`refresh:{family_id} -> hash, ttl 30d`), not Postgres — validating a
-refresh token on every request must be O(1) in-memory, not a Postgres
-round trip. Postgres only holds the family's lifecycle (created/revoked)
-for audit and for "revoke all devices" to have something durable to act
-on. Rotation: each use replaces the Redis value and nothing else; **reuse
-of an already-rotated token** (the old hash no longer matches what's in
-Redis for that family) revokes the whole family in Postgres and deletes
-the Redis key — one compromised token kills every token descended from it.
+One family is one signed-in session: everything a login issues descends from
+it, and it is what "list my sessions" shows. An earlier draft of this
+document had a separate `active_sessions` table, 1:1 with this one and
+repeating its `revoked_at`. It was dropped while building token issuing: two
+copies of "is this session revoked" can disagree after a partial failure,
+and a session screen that shows a device as signed out while its token still
+works is worse than no screen at all. `last_used_at` and `last_ip_address`
+moved here instead. `device_name`, `last_ip_address`, `last_used_at`,
+`expires_at` and `updated_at` were added at the same time.
+
+**Refresh tokens.** The cookie value is `{family_id}.{secret}`, the secret
+being 32 random bytes as base64url. Only SHA-256 of the whole value is ever
+stored; as with the device cookie, 256 random bits leave no candidate set to
+hash, so a key adds nothing.
+
+Redis holds the rotating state in one hash per family,
+`refresh:{family_id} -> {current, previous, rotatedAt}`, expiring with the
+family. Postgres is the source of truth for whether a family is alive
+(revocation is durable there, and a lost Redis key can only end a session,
+never revive one); Redis is the source of truth for which token in the
+family is current, and for "is this session alive" on every authenticated
+request. A refresh must pass both. Rotation is one Lua script, so two
+refreshes can never both rotate the same token:
+
+- presented hash = `current` → rotate (`previous` = old, `current` = new,
+  `rotatedAt` = now) and issue a new cookie;
+- presented hash = `previous` and `rotatedAt` is at most 10 seconds ago →
+  a second tab racing the first: issue an access token only, no new cookie
+  (the browser already holds, or is about to receive, the new one);
+- anything else on a live key → **reuse**: the script deletes the key, and
+  the family is revoked in Postgres with `REUSE_DETECTED`. One replayed
+  token kills every token descended from it, and every access token minted
+  from the family stops working at once (see below).
+
+Logout, "revoke all devices" and reuse revoke in Postgres and delete the
+Redis keys inside one transaction: if Redis cannot be reached, the
+transaction rolls back and the client gets `503`, never a success that did
+not happen.
+
+**Access tokens.** HS256 JWTs, 15 minutes, never longer than the family
+they belong to, with header `typ: at+jwt` and a `kid`. Claims: `iss`,
+`aud`, `sub` (user id), `sid` (family id), `role`, `amr`, `iat`, `exp`,
+`jti`. Every authenticated request checks that `refresh:{sid}` still exists
+in Redis, so a revoked session's access tokens stop working immediately
+rather than at expiry, and fails closed with `503` when Redis cannot answer.
+
+**Refresh cookie.** `tm_refresh`, `HttpOnly; Secure; SameSite=Strict`,
+`Path=/api/v1/auth/refresh` (no other endpoint ever receives it), `Max-Age`
+= the family's remaining lifetime. `/auth/refresh` also requires the header
+`X-TripMates-CSRF: 1`: a cross-origin page cannot send a custom header
+without a CORS preflight, which only allowlisted origins pass.
 
 ```sql
 login_history
@@ -430,9 +478,12 @@ invalid_credentials` with the same headers. Each does the same work in the
 same order: one account lookup, one lockout charge, and exactly one
 Argon2id verification (against a dummy hash made with the same encoder when
 the email has no account, and against the real hash even when the account is
-locked). `login_history` alone records which case it was. No token or session
-is issued yet; a success returns `{userId, verificationTier}` and the device
-cookie.
+locked). `login_history` alone records which case it was. A success opens a
+refresh token family and answers `{status: "AUTHENTICATED", session:
+{accessToken, tokenType, expiresIn, user}}` with the refresh and device
+cookies. `status` is the extension point for a second factor: an account
+that needs one gets a different status and a challenge in a sibling field,
+and no session until the challenge is passed.
 
 Every counter is keyed on SHA-256 of the lower-cased typed email, not on the
 account, so an email with no account is rate-limited, asked for a CAPTCHA and
@@ -470,19 +521,8 @@ victim's own browser.
   success for that user emails the owner (time in IST and IP, deliberately
   no User-Agent). The account's very first sign-in is not alerted.
 
-```sql
-active_sessions
-  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid()
-  user_id              UUID NOT NULL REFERENCES users(id)
-  refresh_family_id    UUID NOT NULL REFERENCES refresh_token_families(id)
-  device_name          TEXT
-  ip_address           INET
-  last_seen_at         TIMESTAMPTZ NOT NULL DEFAULT now()
-  created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
-  revoked_at           TIMESTAMPTZ
-
-  INDEX idx_sessions_user_active (user_id) WHERE revoked_at IS NULL
-```
+The active sessions list is a view over `refresh_token_families` (live and
+not expired), not a table of its own; see that table for why.
 
 ### 2. Vibe Profile
 
