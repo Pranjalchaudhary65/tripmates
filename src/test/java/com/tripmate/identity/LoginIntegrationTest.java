@@ -70,8 +70,9 @@ class LoginIntegrationTest {
         HttpResponse<String> response = api.login(email.toUpperCase(), STRONG_PASSWORD);
 
         assertThat(response.statusCode()).isEqualTo(200);
-        assertThat(JsonPath.<String>read(response.body(), "$.userId")).isEqualTo(userId(email));
-        assertThat(JsonPath.<String>read(response.body(), "$.verificationTier")).isEqualTo("EMAIL");
+        assertThat(JsonPath.<String>read(response.body(), "$.status")).isEqualTo("AUTHENTICATED");
+        assertThat(JsonPath.<String>read(response.body(), "$.session.user.id")).isEqualTo(userId(email));
+        assertThat(JsonPath.<String>read(response.body(), "$.session.user.verificationTier")).isEqualTo("EMAIL");
         assertThat(LoginApi.deviceSetCookie(response)).hasValueSatisfying(cookie -> assertThat(cookie)
                 .contains("HttpOnly", "Secure", "SameSite=Strict", "Path=/api/v1/auth", "Max-Age=34560000"));
         assertThat(DeviceIds.isWellFormed(LoginApi.deviceId(response))).isTrue();

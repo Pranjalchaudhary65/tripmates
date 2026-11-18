@@ -70,8 +70,8 @@ class LoginServiceTest {
                 passwordEncoder,
                 new LoginProperties(3, new LoginProperties.Lockout(5, Duration.ofMinutes(1),
                         Duration.ofMinutes(15), Duration.ofHours(24))),
-                new AuthRateLimitProperties(generous, generous, generous, generous, generous),
-                mock(ApplicationEventPublisher.class), mock(PlatformTransactionManager.class),
+                new AuthRateLimitProperties(generous, generous, generous, generous, generous, generous),
+                mock(SessionService.class), mock(ApplicationEventPublisher.class), mock(PlatformTransactionManager.class),
                 Clock.fixed(Instant.parse("2026-11-15T10:00:00Z"), ZoneOffset.UTC));
         client = new LoginClient(new ClientAddress(InetAddress.getByName("203.0.113.5")), "test", null);
     }

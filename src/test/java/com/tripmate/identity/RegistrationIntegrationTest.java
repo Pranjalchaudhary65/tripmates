@@ -223,10 +223,9 @@ class RegistrationIntegrationTest {
         LocalHttp http = new LocalHttp(port);
 
         assertThat(http.get(RegistrationApi.REGISTER).statusCode()).isEqualTo(401);
-        // The CSRF filter runs before authorization, so an anonymous POST to
-        // any route not exempted from CSRF is refused with 403 before the
-        // 401 check is reached. Either way, no handler runs.
-        assertThat(http.postJson("/api/v1/auth/logout", "{}").statusCode()).isEqualTo(403);
+        // A POST to a route outside the anonymous list needs a bearer token
+        // like any other request; no handler runs without one.
+        assertThat(http.postJson("/api/v1/auth/logout", "{}").statusCode()).isEqualTo(401);
     }
 
     private Map<String, Object> userRow(String email) {

@@ -57,6 +57,11 @@ public final class LocalHttp {
         return send(builder, headerNameValuePairs);
     }
 
+    public HttpResponse<String> post(String path, String... headerNameValuePairs) {
+        return send(HttpRequest.newBuilder(URI.create(baseUrl + path))
+                .POST(HttpRequest.BodyPublishers.noBody()), headerNameValuePairs);
+    }
+
     public HttpResponse<String> options(String path, String... headerNameValuePairs) {
         return send(HttpRequest.newBuilder(URI.create(baseUrl + path))
                 .method("OPTIONS", HttpRequest.BodyPublishers.noBody()), headerNameValuePairs);
