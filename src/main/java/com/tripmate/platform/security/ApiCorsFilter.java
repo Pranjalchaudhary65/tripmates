@@ -43,8 +43,9 @@ public class ApiCorsFilter extends CorsFilter {
             HttpMethod.GET.name(), HttpMethod.POST.name(), HttpMethod.PUT.name(),
             HttpMethod.PATCH.name(), HttpMethod.DELETE.name());
 
-    private static final List<String> ALLOWED_HEADERS =
-            List.of(HttpHeaders.AUTHORIZATION, HttpHeaders.CONTENT_TYPE, CorrelationId.HEADER);
+    /** The CSRF header has to be listed, or the preflight for every refresh from the app would be refused. */
+    private static final List<String> ALLOWED_HEADERS = List.of(HttpHeaders.AUTHORIZATION, HttpHeaders.CONTENT_TYPE,
+            CorrelationId.HEADER, CsrfHeaderFilter.HEADER);
 
     /**
      * Response headers page scripts may read. A browser hides every

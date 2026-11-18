@@ -1,23 +1,21 @@
 package com.tripmate.identity.dto;
 
-import com.tripmate.identity.entity.VerificationTier;
 import com.tripmate.identity.service.LoginResult;
 import io.swagger.v3.oas.annotations.media.Schema;
 
-import java.util.UUID;
-
 /**
- * The credential check passed. No token or session is issued by this
- * response; the tier lets the client decide which screen comes next.
+ * The credential check passed. {@code status} says what happens next;
+ * today the only answer is a session.
  */
 public record LoginResponse(
 
-        UUID userId,
+        @Schema(description = "Branch on this. An unrecognised value means the client cannot complete the login.")
+        LoginStatus status,
 
-        @Schema(description = "Highest identity verification the account has completed")
-        VerificationTier verificationTier) {
+        @Schema(description = "Present when status is AUTHENTICATED")
+        AccessGrantResponse session) {
 
     public static LoginResponse of(LoginResult result) {
-        return new LoginResponse(result.userId(), result.verificationTier());
+        return new LoginResponse(LoginStatus.AUTHENTICATED, AccessGrantResponse.of(result.session()));
     }
 }

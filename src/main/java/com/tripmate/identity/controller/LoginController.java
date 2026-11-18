@@ -26,7 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping(LoginController.BASE)
-@Tag(name = "Login", description = "Check an email and password")
+@Tag(name = "Login", description = "Sign in with an email and password")
 public class LoginController {
 
     public static final String BASE = "/auth";
@@ -44,10 +44,12 @@ public class LoginController {
     @PostMapping(LOGIN)
     @Operation(summary = "Log in with email and password",
             description = "Unknown email, wrong password, unverified email and locked account all get the same 401. "
-                    + "Limited per client IP and per email address. A successful login sets an HttpOnly device "
-                    + "cookie so this browser is recognised next time; no session or token is issued yet.")
-    @ApiResponse(responseCode = "200", description = "Email and password are correct",
-            headers = @Header(name = HttpHeaders.SET_COOKIE, description = "tm_device: identifies this browser"))
+                    + "Limited per client IP and per email address. A successful login opens a session: the body "
+                    + "carries a 15-minute access token, and HttpOnly cookies carry the refresh token and a "
+                    + "device ID that lets this browser be recognised next time. Branch on status.")
+    @ApiResponse(responseCode = "200", description = "Signed in",
+            headers = @Header(name = HttpHeaders.SET_COOKIE, description = "tm_refresh: the refresh token, "
+                    + "sent back only to /auth/refresh; tm_device: identifies this browser"))
     @ApiResponse(responseCode = "400", description = "Malformed request",
             content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemDetail.class)))
     @ApiResponse(responseCode = "401",
@@ -68,6 +70,8 @@ public class LoginController {
         LoginResult result = loginService.login(request, client);
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, DeviceCookie.issue(result.deviceId()).toString())
+                .header(HttpHeaders.SET_COOKIE, RefreshCookie.issue(result.session().refreshToken(),
+                        result.session().refreshMaxAge()).toString())
                 .body(LoginResponse.of(result));
     }
 }

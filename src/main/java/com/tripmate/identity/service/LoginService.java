@@ -70,6 +70,8 @@ public class LoginService {
 
     private final AuthRateLimitProperties limits;
 
+    private final SessionService sessions;
+
     private final ApplicationEventPublisher events;
 
     private final TransactionTemplate transactions;
@@ -84,7 +86,7 @@ public class LoginService {
 
     public LoginService(UserRepository users, LoginHistoryRepository history, LoginLockout lockout,
                         RateLimiter rateLimiter, CaptchaVerifier captcha, PasswordEncoder passwordEncoder,
-                        LoginProperties properties, AuthRateLimitProperties limits,
+                        LoginProperties properties, AuthRateLimitProperties limits, SessionService sessions,
                         ApplicationEventPublisher events, PlatformTransactionManager transactionManager, Clock clock) {
         this.users = users;
         this.history = history;
@@ -94,6 +96,7 @@ public class LoginService {
         this.passwordEncoder = passwordEncoder;
         this.properties = properties;
         this.limits = limits;
+        this.sessions = sessions;
         this.events = events;
         this.transactions = new TransactionTemplate(transactionManager);
         this.clock = clock;
@@ -102,8 +105,8 @@ public class LoginService {
 
     /**
      * Not transactional: Argon2id takes tens of milliseconds and must not hold
-     * a database connection. Only the success bookkeeping runs in a
-     * transaction.
+     * a database connection. Only the success bookkeeping, which opens the
+     * session, runs in a transaction.
      *
      * @throws ApiProblemException {@link LoginProblem#INVALID_CREDENTIALS} for
      *         every kind of refusal, or {@link LoginProblem#CAPTCHA_REQUIRED}
@@ -166,15 +169,17 @@ public class LoginService {
      * names the browser, not the person.
      *
      * <p>The user row is locked so two concurrent first sign-ins from the
-     * same new browser record one "new device" between them, not two.
+     * same new browser record one "new device" between them, not two. The
+     * session is opened in the same transaction, from the locked copy of the
+     * user, so its role and tier are the ones committed at that moment.
      */
     private LoginResult succeed(User user, String email, LoginClient client) {
         String deviceId = client.deviceId() != null ? client.deviceId() : DeviceIds.generate();
         String deviceHash = DeviceIds.hash(deviceId);
         Instant now = clock.instant();
 
-        transactions.executeWithoutResult(status -> {
-            users.findByIdForUpdate(user.getId());
+        SessionTokens session = transactions.execute(status -> {
+            User locked = users.findByIdForUpdate(user.getId()).orElseThrow();
             boolean seenBefore = history.existsByUserIdAndDeviceIdHashAndSuccessTrue(user.getId(), deviceHash);
             boolean firstSignIn = !history.existsByUserIdAndSuccessTrue(user.getId());
             history.save(LoginAttempt.succeeded(user.getId(), email, client.address().address(),
@@ -185,8 +190,9 @@ public class LoginService {
                 events.publishEvent(new NewDeviceLoginEvent(user.getEmail(), user.getFullName(), now,
                         client.address().hostAddress()));
             }
+            return sessions.open(locked, client, now);
         });
-        return new LoginResult(user.getId(), user.getIdVerificationTier(), deviceId);
+        return new LoginResult(deviceId, session);
     }
 
     /**

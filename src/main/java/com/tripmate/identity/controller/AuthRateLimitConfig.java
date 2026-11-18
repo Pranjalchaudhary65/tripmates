@@ -15,8 +15,9 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  * budget. Every one of them can be abused without an account: login for
  * password guessing, register for Argon2id CPU and for emailing strangers,
  * verify-email for code guessing across many registrations, resend for
- * email volume. The per-account caps on codes stay as well; this is the
- * layer above them.
+ * email volume, refresh for load on the session store (it is reachable with
+ * nothing but a cookie, real or made up). The per-account caps on codes stay
+ * as well; this is the layer above them.
  */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(AuthRateLimitProperties.class)
@@ -40,6 +41,7 @@ class AuthRateLimitConfig implements WebMvcConfigurer {
                 RegistrationController.BASE + RegistrationController.VERIFY_EMAIL, limits.verifyEmailPerIp());
         limit(registry, "resend-ip",
                 RegistrationController.BASE + RegistrationController.RESEND_VERIFICATION, limits.resendPerIp());
+        limit(registry, "refresh-ip", SessionController.BASE + SessionController.REFRESH, limits.refreshPerIp());
     }
 
     private void limit(InterceptorRegistry registry, String bucket, String route, RateLimit limit) {
