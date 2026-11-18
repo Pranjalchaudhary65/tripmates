@@ -69,6 +69,17 @@
 			<version>${bouncycastle.version}</version>
 		</dependency>
 
+		<dependency>
+			<!-- Bearer-token authentication filter and JwtDecoder contract; version from Spring Boot's managed Spring Security -->
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-oauth2-resource-server</artifactId>
+		</dependency>
+		<dependency>
+			<!-- JWT signing and verification (Nimbus JOSE + JWT underneath) -->
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-oauth2-jose</artifactId>
+		</dependency>
+
 		<!-- Persistence -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

@@ -29,6 +29,11 @@ tripmate:
     verification:
       # Test-only key, never used outside the test profile.
       hmac-key: dGVzdC1vbmx5LW90cC1obWFjLWtleS1ub3QtZm9yLXByb2R1Y3Rpb24h
+    access-token:
+      # Test-only keys, never used outside the test profile. A previous key
+      # is set so the rotation path is exercised by every test run.
+      signing-key: dGVzdC1vbmx5LWp3dC1zaWduaW5nLWtleS1jdXJyZW50
+      previous-signing-key: dGVzdC1vbmx5LWp3dC1zaWduaW5nLWtleS1wcmV2aW91cw==
 
 management:
   endpoint:

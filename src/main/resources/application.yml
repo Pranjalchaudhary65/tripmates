@@ -116,6 +116,25 @@ tripmate:
         base-duration: 1m
         max-duration: 15m
         failure-window: 24h
+    access-token:
+      issuer: tripmate
+      audience: tripmate-api
+      ttl: 15m
+      # Tolerance for clocks of several app instances disagreeing slightly.
+      clock-skew: 30s
+      # Base64, at least 32 random bytes. No default: a missing key stops
+      # startup instead of signing tokens with something guessable.
+      signing-key: ${JWT_SIGNING_KEY}
+      # The key being rotated out, still accepted for verification for one
+      # token lifetime after a rotation. Empty the rest of the time.
+      previous-signing-key: ${JWT_PREVIOUS_SIGNING_KEY:}
+    session:
+      # Fixed from sign-in; refreshing never extends it.
+      lifetime: 30d
+      # A token replaced less than this long ago still buys an access token
+      # (no new refresh token), so two tabs refreshing together do not end
+      # the session. Any later use of it is treated as theft.
+      reuse-grace: 10s
     captcha:
       # "none" accepts every request. A real provider registers its own
       # CaptchaVerifier under another value; an unknown value stops startup.
@@ -137,6 +156,11 @@ tripmate:
       resend-per-ip:
         capacity: 10
         period: 1h
+      refresh-per-ip:
+        # Each signed-in browser refreshes about once per 15 minutes; this
+        # leaves room for many users behind one NAT address.
+        capacity: 60
+        period: 10m
 
 management:
   endpoints:
