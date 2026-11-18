@@ -7,6 +7,19 @@ export const API_BASE_URL = 'http://api.test/api/v1';
 /** Matches test.environmentOptions.jsdom.url in vite.config.ts, and the backend's allowed dev origin. */
 export const APP_ORIGIN = 'http://localhost:5173';
 
+/** A successful LoginResponse as the backend sends it. */
+export function authenticated(userId: string, verificationTier: string) {
+  return {
+    status: 'AUTHENTICATED',
+    session: {
+      accessToken: 'header.payload.signature',
+      tokenType: 'Bearer',
+      expiresIn: 900,
+      user: { id: userId, role: 'USER', verificationTier },
+    },
+  };
+}
+
 /** ApiCorsFilter's exposed headers. */
 export const EXPOSED_HEADERS = ['X-Correlation-Id', 'Retry-After'];
 
@@ -50,7 +63,7 @@ export function createApiServer() {
           status: 200,
           headers: {
             'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE',
-            'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Correlation-Id',
+            'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Correlation-Id, X-TripMates-CSRF',
           },
         }),
       ),

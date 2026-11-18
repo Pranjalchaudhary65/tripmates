@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { HttpResponse } from 'msw';
-import { apiPost, createApiServer } from '../test/apiServer';
+import { apiPost, authenticated, createApiServer } from '../test/apiServer';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installAuthInterceptors, REFRESH_PATH } from '../api/authRefresh';
 import { apiClient } from '../api/client';
@@ -239,9 +239,7 @@ describe('verifyEmail and resend', () => {
 
 describe('login', () => {
   it('records the confirmed credentials and creates no session', async () => {
-    server.use(
-      apiPost('/auth/login', () => HttpResponse.json({ userId: USER_ID, verificationTier: 'EMAIL' })),
-    );
+    server.use(apiPost('/auth/login', () => HttpResponse.json(authenticated(USER_ID, 'EMAIL'))));
 
     const result = await useAuthStore.getState().login({ email: 'asha@example.com', password: 'pw' });
 
@@ -273,14 +271,33 @@ describe('login', () => {
   });
 
   it('rejects a login response with an unknown tier', async () => {
+    server.use(apiPost('/auth/login', () => HttpResponse.json(authenticated(USER_ID, 'GOD_MODE'))));
+
+    const result = await useAuthStore.getState().login({ email: 'asha@example.com', password: 'pw' });
+
+    expect(result.ok).toBe(false);
+    expect(useAuthStore.getState().confirmedCredentials).toBeNull();
+  });
+
+  it('does not treat a login status it does not know as a sign-in', async () => {
     server.use(
-      apiPost('/auth/login', () => HttpResponse.json({ userId: USER_ID, verificationTier: 'GOD_MODE' })),
+      apiPost('/auth/login', () =>
+        HttpResponse.json({ ...authenticated(USER_ID, 'EMAIL'), status: 'SECOND_FACTOR_REQUIRED' }),
+      ),
     );
 
     const result = await useAuthStore.getState().login({ email: 'asha@example.com', password: 'pw' });
 
     expect(result.ok).toBe(false);
     expect(useAuthStore.getState().confirmedCredentials).toBeNull();
+  });
+
+  it('rejects a response that has no status and session', async () => {
+    server.use(apiPost('/auth/login', () => HttpResponse.json({ userId: USER_ID, verificationTier: 'EMAIL' })));
+
+    const result = await useAuthStore.getState().login({ email: 'asha@example.com', password: 'pw' });
+
+    expect(result.ok).toBe(false);
   });
 
   describe('Retry-After on a 429', () => {

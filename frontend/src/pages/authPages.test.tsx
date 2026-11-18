@@ -5,7 +5,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { routes } from '../router';
 import { useAuthStore } from '../stores/authStore';
-import { apiPost, createApiServer } from '../test/apiServer';
+import { apiPost, authenticated, createApiServer } from '../test/apiServer';
 
 const CHALLENGE_MESSAGE = 'If this email address can be used, a verification code has been sent to it.';
 const INVALID_CREDENTIALS =
@@ -321,7 +321,7 @@ describe('login screen', () => {
   it('confirms the credentials and goes home without creating a session', async () => {
     server.use(
       apiPost('/auth/login', () =>
-        HttpResponse.json({ userId: '0d4a3c1e-8f7b-4e2a-9c6d-5b4a3f2e1d0c', verificationTier: 'EMAIL' }),
+        HttpResponse.json(authenticated('0d4a3c1e-8f7b-4e2a-9c6d-5b4a3f2e1d0c', 'EMAIL')),
       ),
     );
     const router = renderAt('/login');
