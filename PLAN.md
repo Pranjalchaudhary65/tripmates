@@ -49,11 +49,11 @@ Deadline: 2026-11-30.
 - [x] Zustand auth store wired to real endpoints from 2a
 
 ## Step 3a — JWT, refresh rotation, sessions, 2FA backend
-- [ ] Access token (15 min) + refresh token rotation with reuse detection
-- [ ] refresh_token_families table, Redis-backed current-hash lookup
-- [ ] httpOnly/Secure/SameSite refresh cookie + CSRF token on /auth/refresh
-- [ ] Logout + "revoke all devices"
-- [ ] active_sessions listing endpoint
+- [x] Access token (15 min) + refresh token rotation with reuse detection
+- [x] refresh_token_families table, Redis-backed current-hash lookup
+- [x] httpOnly/Secure/SameSite refresh cookie + CSRF token on /auth/refresh
+- [x] Logout + "revoke all devices"
+- [x] active_sessions listing endpoint
 - [ ] TOTP 2FA setup + backup codes, mandatory for ADMIN role
 - [ ] Authorization test suite pattern established (owner/non-owner/anon) — applied retroactively to Steps 2a-3a endpoints
 

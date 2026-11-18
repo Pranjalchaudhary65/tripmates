@@ -95,3 +95,16 @@ One line per commit: what I built, and the key decision behind it.
   Showed server wording only for an allowlist of problem codes over
   rendering detail directly, so no unreviewed server text reaches users, and
   exposed Retry-After through CORS so a 429 shows the real wait.
+- **Step 3a (first half)** — Built 15-minute HS256 access tokens, refresh token
+  rotation with reuse detection, logout, "revoke all devices" and the sessions
+  list. Chose an atomic Redis Lua script for rotation over check-then-write in
+  Java, so parallel refreshes can never leave two live tokens in a family, and
+  gave the just-replaced token a 10-second grace that buys an access token but
+  no new cookie, so two tabs racing don't sign a real user out. Chose a
+  per-request check that the session key still exists over accepting the
+  15-minute window or keeping a denylist: logout kills outstanding access
+  tokens at once, and a lost Redis key ends a session instead of reviving one.
+  Folded the planned active_sessions table into refresh_token_families so
+  "is this session revoked" lives in one place, and used a required custom
+  header for CSRF on /auth/refresh instead of double-submit, since a separate
+  API host can't set a script-readable cookie on the app's origin.
