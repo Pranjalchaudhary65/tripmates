@@ -11,7 +11,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** Calls the session endpoints over real HTTP the way the React app would. */
-final class SessionApi {
+public final class SessionApi {
 
     static final String REFRESH = "/api/v1/auth/refresh";
 
@@ -31,19 +31,19 @@ final class SessionApi {
 
     private final LoginApi login;
 
-    SessionApi(LocalHttp http) {
+    public SessionApi(LocalHttp http) {
         this.http = http;
         this.login = new LoginApi(http);
     }
 
     /** Logs in and returns the session it opened; fails the test if login does not succeed. */
-    Session signIn(String email, String password, String... headers) {
+    public Session signIn(String email, String password, String... headers) {
         HttpResponse<String> response = login.login(email, password, headers);
         assertThat(response.statusCode()).as(response.body()).isEqualTo(200);
         return new Session(JsonPath.read(response.body(), "$.session.accessToken"), refreshToken(response));
     }
 
-    HttpResponse<String> refresh(String refreshToken, String... extraHeaders) {
+    public HttpResponse<String> refresh(String refreshToken, String... extraHeaders) {
         return http.post(REFRESH, concat(new String[] {
                 "Cookie", REFRESH_COOKIE + "=" + refreshToken, CSRF_HEADER, "1"}, extraHeaders));
     }
@@ -89,7 +89,7 @@ final class SessionApi {
                 .isPresent();
     }
 
-    static String accessTokenOfRefresh(HttpResponse<String> response) {
+    public static String accessTokenOfRefresh(HttpResponse<String> response) {
         return JsonPath.read(response.body(), "$.accessToken");
     }
 
@@ -104,13 +104,13 @@ final class SessionApi {
         return all;
     }
 
-    record Session(String accessToken, String refreshToken) {
+    public record Session(String accessToken, String refreshToken) {
 
-        String sessionId() {
+        public String sessionId() {
             return claim("sid");
         }
 
-        String userId() {
+        public String userId() {
             return claim("sub");
         }
 

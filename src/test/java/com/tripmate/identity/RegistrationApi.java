@@ -12,7 +12,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** Calls the registration endpoints over real HTTP the way a client would. */
-final class RegistrationApi {
+public final class RegistrationApi {
 
     static final String REGISTER = "/api/v1/auth/register";
 
@@ -20,18 +20,18 @@ final class RegistrationApi {
 
     static final String RESEND = "/api/v1/auth/verify-email/resend";
 
-    static final String STRONG_PASSWORD = "violet-kettle-harbour-91";
+    public static final String STRONG_PASSWORD = "violet-kettle-harbour-91";
 
     private final LocalHttp http;
 
     private final MailpitClient mailpit;
 
-    RegistrationApi(LocalHttp http, MailpitClient mailpit) {
+    public RegistrationApi(LocalHttp http, MailpitClient mailpit) {
         this.http = http;
         this.mailpit = mailpit;
     }
 
-    static String uniqueEmail() {
+    public static String uniqueEmail() {
         return "user-" + UUID.randomUUID() + "@example.com";
     }
 
@@ -65,7 +65,7 @@ final class RegistrationApi {
     }
 
     /** Registers and verifies, leaving a verified account behind. */
-    void registerVerified(String email) {
+    public void registerVerified(String email) {
         HttpResponse<String> registered = register(email);
         assertThat(registered.statusCode()).isEqualTo(202);
         String code = mailpit.awaitVerificationCode(email);

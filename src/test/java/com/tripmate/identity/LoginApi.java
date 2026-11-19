@@ -6,7 +6,7 @@ import java.net.http.HttpResponse;
 import java.util.Optional;
 
 /** Calls the login endpoint over real HTTP the way a browser would. */
-final class LoginApi {
+public final class LoginApi {
 
     static final String LOGIN = "/api/v1/auth/login";
 
@@ -14,11 +14,11 @@ final class LoginApi {
 
     private final LocalHttp http;
 
-    LoginApi(LocalHttp http) {
+    public LoginApi(LocalHttp http) {
         this.http = http;
     }
 
-    HttpResponse<String> login(String email, String password, String... headers) {
+    public HttpResponse<String> login(String email, String password, String... headers) {
         return http.postJson(LOGIN, """
                 {"email":"%s","password":"%s"}""".formatted(email, password), headers);
     }
