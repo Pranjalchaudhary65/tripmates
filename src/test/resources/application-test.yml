@@ -8,6 +8,15 @@
 spring:
   flyway:
     clean-disabled: false # tests are allowed to reset the schema between runs
+  mail:
+    properties:
+      # Without these JavaMail resolves this machine's canonical host name on
+      # every send, once for EHLO and once for the Message-ID; with slow
+      # reverse DNS on the dev box that took 5-15 s per lookup and timed out
+      # tests waiting for mail. Mailpit accepts any name. mail.host only
+      # names the Message-ID domain: the sender connects to spring.mail.host.
+      mail.smtp.localhost: localhost
+      mail.host: localhost
 
 server:
   tomcat:
