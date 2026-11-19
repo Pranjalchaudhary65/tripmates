@@ -108,3 +108,17 @@ One line per commit: what I built, and the key decision behind it.
   "is this session revoked" lives in one place, and used a required custom
   header for CSRF on /auth/refresh instead of double-submit, since a separate
   API host can't set a script-readable cookie on the app's origin.
+- **Step 3a (second half)** — Built TOTP 2FA (RFC 6238 on the JDK's HMAC),
+  backup codes, the second-factor login step, an admin route that needs both
+  the ADMIN role and otp in amr, and an authorization matrix over every route.
+  Chose a password-verified login that returns only a hashed, 5-minute,
+  5-attempt Redis challenge over a password-only token with amr checks on each
+  route, so no route can forget to enforce the second factor. Refused replayed
+  codes with a last-used time step kept under the user row lock, because the
+  ±30-second window alone lets a phished code be reused. Encrypted the TOTP
+  secret with per-user data keys wrapped by an environment KEK over one global
+  key, so one account can be crypto-shredded without touching the rest.
+  Hashed backup codes with a keyed HMAC over Argon2id, since ten Argon2id
+  checks per attempt would be a free CPU attack. Chose 404 over 403 for a
+  non-owner, so an ID never confirms it exists, and made the matrix read
+  routes from Spring MVC so an uncovered endpoint fails the build.

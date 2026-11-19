@@ -54,8 +54,8 @@ Deadline: 2026-11-30.
 - [x] httpOnly/Secure/SameSite refresh cookie + CSRF token on /auth/refresh
 - [x] Logout + "revoke all devices"
 - [x] active_sessions listing endpoint
-- [ ] TOTP 2FA setup + backup codes, mandatory for ADMIN role
-- [ ] Authorization test suite pattern established (owner/non-owner/anon) — applied retroactively to Steps 2a-3a endpoints
+- [x] TOTP 2FA setup + backup codes, mandatory for ADMIN role
+- [x] Authorization test suite pattern established (owner/non-owner/anon) — applied retroactively to Steps 2a-3a endpoints
 
 ## Step 3b — Auth frontend: 2FA + session management
 - [ ] 2FA challenge screen (TOTP + backup code), access token kept in memory only
