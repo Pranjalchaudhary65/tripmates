@@ -22,13 +22,23 @@ public final class AccessTokenClaims {
     public static final String ROLE = "role";
 
     /**
-     * RFC 8176 authentication methods: {@code pwd} for a password login.
-     * A second factor adds its own value, which is how an admin-only route
-     * will tell a password-only session from a fully verified one.
+     * RFC 8176 authentication methods: {@code pwd} for a password login, and
+     * {@code otp} added when the login also passed a TOTP or backup code
+     * (both are one-time passwords). This is how an admin-only route tells a
+     * password-only session from a fully verified one.
      */
     public static final String AUTH_METHODS = "amr";
 
     static final String PASSWORD_METHOD = "pwd";
+
+    public static final String OTP_METHOD = "otp";
+
+    /**
+     * Each amr value becomes a granted authority with this prefix, so an
+     * authorization rule can require {@code AMR_otp} the same way it requires
+     * a role.
+     */
+    public static final String AUTH_METHOD_AUTHORITY_PREFIX = "AMR_";
 
     private AccessTokenClaims() {
     }

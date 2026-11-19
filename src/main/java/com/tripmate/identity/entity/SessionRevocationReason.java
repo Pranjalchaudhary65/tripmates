@@ -13,5 +13,8 @@ public enum SessionRevocationReason {
     REVOKE_ALL_DEVICES,
 
     /** Ended by moderation. */
-    ADMIN
+    ADMIN,
+
+    /** Ended because two-factor authentication was turned on or off from another session. */
+    SECURITY_CHANGE
 }

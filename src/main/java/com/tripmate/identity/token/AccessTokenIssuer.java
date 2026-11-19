@@ -38,10 +38,13 @@ public class AccessTokenIssuer {
     }
 
     /**
-     * @param sessionExpiresAt the family's absolute expiry; the token never
-     *                         outlives the session it belongs to
+     * @param sessionExpiresAt     the family's absolute expiry; the token never
+     *                             outlives the session it belongs to
+     * @param secondFactorVerified the session's login passed a second factor:
+     *                             amr is {@code ["pwd","otp"]} instead of {@code ["pwd"]}
      */
-    public AccessToken issue(UUID userId, Role role, UUID sessionId, Instant sessionExpiresAt) {
+    public AccessToken issue(UUID userId, Role role, UUID sessionId, Instant sessionExpiresAt,
+                             boolean secondFactorVerified) {
         Instant now = clock.instant().truncatedTo(ChronoUnit.SECONDS);
         Instant ttlExpiry = now.plus(properties.ttl());
         Instant expiresAt = (ttlExpiry.isBefore(sessionExpiresAt) ? ttlExpiry : sessionExpiresAt)
@@ -56,7 +59,9 @@ public class AccessTokenIssuer {
                 .jwtID(UUID.randomUUID().toString())
                 .claim(AccessTokenClaims.SESSION_ID, sessionId.toString())
                 .claim(AccessTokenClaims.ROLE, role.name())
-                .claim(AccessTokenClaims.AUTH_METHODS, List.of(AccessTokenClaims.PASSWORD_METHOD))
+                .claim(AccessTokenClaims.AUTH_METHODS, secondFactorVerified
+                        ? List.of(AccessTokenClaims.PASSWORD_METHOD, AccessTokenClaims.OTP_METHOD)
+                        : List.of(AccessTokenClaims.PASSWORD_METHOD))
                 .build();
 
         SigningKey key = keys.current();

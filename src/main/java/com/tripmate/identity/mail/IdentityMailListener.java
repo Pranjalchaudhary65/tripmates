@@ -67,6 +67,16 @@ public class IdentityMailListener {
         }
     }
 
+    @Async
+    @TransactionalEventListener
+    public void on(TwoFactorNoticeEvent event) {
+        try {
+            mailer.sendTwoFactorNotice(event);
+        } catch (MailException e) {
+            log.warn("Two-factor notice ({}) could not be sent: {}", event.kind(), causeChain(e));
+        }
+    }
+
     /**
      * Exception class names only, outermost first, e.g.
      * {@code MailSendException > MessagingException > ConnectException}.

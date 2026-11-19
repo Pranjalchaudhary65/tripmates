@@ -24,6 +24,18 @@ public class IdentityMailer {
 
     static final String NEW_DEVICE_SUBJECT = "New sign-in to your TripMates account";
 
+    static final String TWO_FACTOR_ENABLED_SUBJECT = "Two-factor authentication is now on for your TripMates account";
+
+    static final String TWO_FACTOR_DISABLED_SUBJECT = "Two-factor authentication was turned off on your TripMates account";
+
+    static final String BACKUP_CODES_REGENERATED_SUBJECT = "New TripMates backup codes were created";
+
+    static final String BACKUP_CODE_USED_SUBJECT = "A backup code was used to sign in to TripMates";
+
+    private static final String NOT_YOU = """
+            If this was not you, someone has your password and access to your account. \
+            Sign in, change your password, and use "sign out of all devices".""";
+
     /** Every TripMates user is told times in the zone the 18+ rule uses. */
     private static final DateTimeFormatter WHEN = DateTimeFormatter
             .ofPattern("d MMM uuuu, HH:mm 'IST'", Locale.ENGLISH)
@@ -81,6 +93,49 @@ public class IdentityMailer {
 
                 If it was not you, someone else knows your password. Change it on every site where you use it.
                 """.formatted(event.fullName(), WHEN.format(event.at()), event.ipAddress()));
+    }
+
+    /**
+     * One email per kind of change, sent whoever made it: if it was an
+     * attacker, this is how the owner finds out. Never carries a code, a
+     * secret or a backup code.
+     */
+    public void sendTwoFactorNotice(TwoFactorNoticeEvent event) {
+        String when = WHEN.format(event.at());
+        String subject;
+        String what;
+        switch (event.kind()) {
+            case ENABLED -> {
+                subject = TWO_FACTOR_ENABLED_SUBJECT;
+                what = "Two-factor authentication was turned on. Signing in now needs a code from your "
+                        + "authenticator app as well as your password, and every other session was signed out.";
+            }
+            case DISABLED -> {
+                subject = TWO_FACTOR_DISABLED_SUBJECT;
+                what = "Two-factor authentication was turned off. Your password alone now signs in to your "
+                        + "account, and every other session was signed out.";
+            }
+            case BACKUP_CODES_REGENERATED -> {
+                subject = BACKUP_CODES_REGENERATED_SUBJECT;
+                what = "A new set of backup codes was created. Your old backup codes no longer work.";
+            }
+            case BACKUP_CODE_USED -> {
+                subject = BACKUP_CODE_USED_SUBJECT;
+                what = "A backup code was used instead of your authenticator app to sign in. That code no "
+                        + "longer works. Backup codes left: " + event.backupCodesLeft() + ".";
+            }
+            default -> throw new IllegalArgumentException("Unknown two-factor notice " + event.kind());
+        }
+        send(event.email(), subject, """
+                Hi %s,
+
+                %s
+
+                When: %s
+                IP address: %s
+
+                %s
+                """.formatted(event.fullName(), what, when, event.ipAddress(), NOT_YOU));
     }
 
     private void send(String to, String subject, String body) {

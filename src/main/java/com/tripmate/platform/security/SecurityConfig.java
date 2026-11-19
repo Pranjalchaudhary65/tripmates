@@ -57,9 +57,10 @@ import java.util.List;
 @EnableConfigurationProperties(CorsProperties.class)
 public class SecurityConfig {
 
-    /** Sign-up, email verification, login and refresh: reachable before an access token exists. */
+    /** Sign-up, email verification, login (both steps) and refresh: reachable before an access token exists. */
     static final String[] ANONYMOUS_AUTH_ROUTES = {
             ApiPaths.V1 + LoginController.BASE + LoginController.LOGIN,
+            ApiPaths.V1 + LoginController.BASE + LoginController.SECOND_FACTOR,
             ApiPaths.V1 + RegistrationController.BASE + RegistrationController.REGISTER,
             ApiPaths.V1 + RegistrationController.BASE + RegistrationController.VERIFY_EMAIL,
             ApiPaths.V1 + RegistrationController.BASE + RegistrationController.RESEND_VERIFICATION,

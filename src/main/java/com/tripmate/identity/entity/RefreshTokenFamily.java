@@ -76,6 +76,9 @@ public class RefreshTokenFamily implements Persistable<UUID> {
     @Column(name = "revoked_reason", length = 30)
     private SessionRevocationReason revokedReason;
 
+    @Column(name = "second_factor_verified", nullable = false, updatable = false)
+    private boolean secondFactorVerified;
+
     @Transient
     private boolean isNew = true;
 
@@ -94,7 +97,7 @@ public class RefreshTokenFamily implements Persistable<UUID> {
     }
 
     public static RefreshTokenFamily open(UUID userId, String deviceName, InetAddress ip, String userAgent,
-                                          Instant now, Instant expiresAt) {
+                                          Instant now, Instant expiresAt, boolean secondFactorVerified) {
         if (!expiresAt.isAfter(now)) {
             throw new IllegalArgumentException("A session must expire after it starts");
         }
@@ -110,6 +113,7 @@ public class RefreshTokenFamily implements Persistable<UUID> {
         family.expiresAt = expiresAt;
         family.createdAt = now;
         family.updatedAt = now;
+        family.secondFactorVerified = secondFactorVerified;
         return family;
     }
 
@@ -165,5 +169,10 @@ public class RefreshTokenFamily implements Persistable<UUID> {
 
     public SessionRevocationReason getRevokedReason() {
         return revokedReason;
+    }
+
+    /** The login behind this session passed TOTP or a backup code; fixed for the session's life. */
+    public boolean isSecondFactorVerified() {
+        return secondFactorVerified;
     }
 }

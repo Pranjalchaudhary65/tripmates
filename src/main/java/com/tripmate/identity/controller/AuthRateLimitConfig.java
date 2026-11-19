@@ -35,6 +35,8 @@ class AuthRateLimitConfig implements WebMvcConfigurer {
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         limit(registry, "login-ip", LoginController.BASE + LoginController.LOGIN, limits.loginPerIp());
+        limit(registry, "second-factor-ip", LoginController.BASE + LoginController.SECOND_FACTOR,
+                limits.secondFactorPerIp());
         limit(registry, "register-ip",
                 RegistrationController.BASE + RegistrationController.REGISTER, limits.registerPerIp());
         limit(registry, "verify-email-ip",

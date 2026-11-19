@@ -9,5 +9,12 @@ package com.tripmate.identity.dto;
 public enum LoginStatus {
 
     /** A session was opened: {@code session} holds the access token and the refresh cookie is set. */
-    AUTHENTICATED
+    AUTHENTICATED,
+
+    /**
+     * The password was right and the account has 2FA: {@code secondFactor}
+     * holds a challenge, and no session, access token or cookie exists yet.
+     * Send the challenge and a code to /auth/login/second-factor.
+     */
+    SECOND_FACTOR_REQUIRED
 }

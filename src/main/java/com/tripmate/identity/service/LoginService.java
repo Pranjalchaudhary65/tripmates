@@ -5,20 +5,15 @@ import com.tripmate.identity.dto.LoginRequest;
 import com.tripmate.identity.entity.LoginAttempt;
 import com.tripmate.identity.entity.LoginFailureReason;
 import com.tripmate.identity.entity.User;
-import com.tripmate.identity.mail.NewDeviceLoginEvent;
 import com.tripmate.identity.repository.LoginHistoryRepository;
 import com.tripmate.identity.repository.UserRepository;
 import com.tripmate.platform.error.ApiProblemException;
 import com.tripmate.platform.ratelimit.RateLimiter;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
-import java.time.Instant;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -70,11 +65,9 @@ public class LoginService {
 
     private final AuthRateLimitProperties limits;
 
-    private final SessionService sessions;
+    private final LoginCompletion completion;
 
-    private final ApplicationEventPublisher events;
-
-    private final TransactionTemplate transactions;
+    private final SecondFactorChallenges challenges;
 
     private final Clock clock;
 
@@ -86,8 +79,8 @@ public class LoginService {
 
     public LoginService(UserRepository users, LoginHistoryRepository history, LoginLockout lockout,
                         RateLimiter rateLimiter, CaptchaVerifier captcha, PasswordEncoder passwordEncoder,
-                        LoginProperties properties, AuthRateLimitProperties limits, SessionService sessions,
-                        ApplicationEventPublisher events, PlatformTransactionManager transactionManager, Clock clock) {
+                        LoginProperties properties, AuthRateLimitProperties limits, LoginCompletion completion,
+                        SecondFactorChallenges challenges, Clock clock) {
         this.users = users;
         this.history = history;
         this.lockout = lockout;
@@ -96,9 +89,8 @@ public class LoginService {
         this.passwordEncoder = passwordEncoder;
         this.properties = properties;
         this.limits = limits;
-        this.sessions = sessions;
-        this.events = events;
-        this.transactions = new TransactionTemplate(transactionManager);
+        this.completion = completion;
+        this.challenges = challenges;
         this.clock = clock;
         this.dummyHash = passwordEncoder.encode(DeviceIds.generate());
     }
@@ -107,6 +99,11 @@ public class LoginService {
      * Not transactional: Argon2id takes tens of milliseconds and must not hold
      * a database connection. Only the success bookkeeping, which opens the
      * session, runs in a transaction.
+     *
+     * <p>An account that needs a second factor gets a challenge instead of a
+     * session. The password counter is still cleared - the password was
+     * right - and the codes that follow are counted on a counter of their own
+     * (see {@link SecondFactorLoginService}).
      *
      * @throws ApiProblemException {@link LoginProblem#INVALID_CREDENTIALS} for
      *         every kind of refusal, or {@link LoginProblem#CAPTCHA_REQUIRED}
@@ -141,7 +138,10 @@ public class LoginService {
             throw new ApiProblemException(LoginProblem.INVALID_CREDENTIALS);
         }
         lockout.reset(counterKey);
-        return succeed(user, email, client);
+        if (user.requiresSecondFactor()) {
+            return LoginResult.secondFactorRequired(challenges.open(user.getId(), counterKey, clock.instant()));
+        }
+        return completion.complete(user, email, client, false);
     }
 
     private static LoginFailureReason failureReason(LoginLockout.Attempt charged, User user, boolean passwordMatches) {
@@ -161,38 +161,6 @@ public class LoginService {
             return LoginFailureReason.EMAIL_NOT_VERIFIED;
         }
         return null;
-    }
-
-    /**
-     * Keeps the browser's existing device ID even when it is new to this
-     * account (another account signed in on the same browser before): the ID
-     * names the browser, not the person.
-     *
-     * <p>The user row is locked so two concurrent first sign-ins from the
-     * same new browser record one "new device" between them, not two. The
-     * session is opened in the same transaction, from the locked copy of the
-     * user, so its role and tier are the ones committed at that moment.
-     */
-    private LoginResult succeed(User user, String email, LoginClient client) {
-        String deviceId = client.deviceId() != null ? client.deviceId() : DeviceIds.generate();
-        String deviceHash = DeviceIds.hash(deviceId);
-        Instant now = clock.instant();
-
-        SessionTokens session = transactions.execute(status -> {
-            User locked = users.findByIdForUpdate(user.getId()).orElseThrow();
-            boolean seenBefore = history.existsByUserIdAndDeviceIdHashAndSuccessTrue(user.getId(), deviceHash);
-            boolean firstSignIn = !history.existsByUserIdAndSuccessTrue(user.getId());
-            history.save(LoginAttempt.succeeded(user.getId(), email, client.address().address(),
-                    client.userAgent(), deviceHash, now));
-            // The very first sign-in is from a new device by definition; alerting
-            // on it would only teach people to ignore the alert.
-            if (!seenBefore && !firstSignIn) {
-                events.publishEvent(new NewDeviceLoginEvent(user.getEmail(), user.getFullName(), now,
-                        client.address().hostAddress()));
-            }
-            return sessions.open(locked, client, now);
-        });
-        return new LoginResult(deviceId, session);
     }
 
     /**

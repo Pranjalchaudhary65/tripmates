@@ -77,13 +77,17 @@ public class SessionService {
      * Opens a new family for a login that has just succeeded. Runs inside
      * the login's own transaction, so a Redis failure here rolls the whole
      * success back, login_history row included, and the login answers 503.
+     *
+     * @param secondFactorVerified recorded on the family, so every access
+     *                             token it ever mints, after any number of
+     *                             refreshes, carries the same amr
      */
     @Transactional(propagation = Propagation.MANDATORY)
-    public SessionTokens open(User user, LoginClient client, Instant now) {
+    public SessionTokens open(User user, LoginClient client, Instant now, boolean secondFactorVerified) {
         Instant expiresAt = now.plus(properties.lifetime());
         RefreshTokenFamily family = families.save(RefreshTokenFamily.open(user.getId(),
                 DeviceLabels.describe(client.userAgent()), client.address().address(), client.userAgent(),
-                now, expiresAt));
+                now, expiresAt, secondFactorVerified));
         String refreshToken = RefreshTokens.generate(family.getId());
         store.create(family.getId(), RefreshTokens.hash(refreshToken), properties.lifetime());
         return tokens(user, family, refreshToken, now);
@@ -142,6 +146,21 @@ public class SessionService {
         });
     }
 
+    /**
+     * Ends every session of the user except {@code keep}, inside the
+     * caller's transaction: a change to how the account signs in must not
+     * leave sessions opened under the old rules running. The bulk update
+     * clears the persistence context, so callers make their entity changes
+     * before calling this.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void revokeOthers(UUID userId, UUID keep, SessionRevocationReason reason) {
+        List<UUID> others = families.findLiveIdsByUserId(userId).stream()
+                .filter(id -> !id.equals(keep))
+                .toList();
+        revokeInTransaction(userId, others, reason);
+    }
+
     /** The caller's live sessions, most recently used first. Only ever the caller's own. */
     public List<RefreshTokenFamily> list(SessionPrincipal caller) {
         return families.findTop100ByUserIdAndRevokedAtIsNullAndExpiresAtAfterOrderByLastUsedAtDesc(
@@ -167,7 +186,7 @@ public class SessionService {
 
     private SessionTokens tokens(User user, RefreshTokenFamily family, String refreshToken, Instant now) {
         AccessToken accessToken = accessTokens.issue(user.getId(), user.getRole(), family.getId(),
-                family.getExpiresAt());
+                family.getExpiresAt(), family.isSecondFactorVerified());
         return new SessionTokens(user.getId(), user.getRole(), user.getIdVerificationTier(), accessToken,
                 refreshToken, Duration.between(now, family.getExpiresAt()));
     }

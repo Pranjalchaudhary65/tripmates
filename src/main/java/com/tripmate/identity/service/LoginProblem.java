@@ -21,7 +21,19 @@ public enum LoginProblem implements ProblemType {
      * nothing about whether an account exists.
      */
     CAPTCHA_REQUIRED("captcha_required",
-            "Complete the CAPTCHA and try again.");
+            "Complete the CAPTCHA and try again."),
+
+    /**
+     * Wrong, malformed or replayed code, a used backup code, or too many
+     * recent failures: one answer for all of them. Only a caller who already
+     * gave the right password can get here.
+     */
+    INVALID_SECOND_FACTOR("invalid_second_factor",
+            "That code is not valid. Enter the current code from your authenticator app, or an unused backup code."),
+
+    /** Unknown, expired, already completed or out of attempts: the login has to start again from the password. */
+    LOGIN_CHALLENGE_EXPIRED("login_challenge_expired",
+            "This sign-in has expired. Enter your email and password again.");
 
     private final String code;
 
