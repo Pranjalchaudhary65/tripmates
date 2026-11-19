@@ -170,8 +170,9 @@ users
   phone_verified_at       TIMESTAMPTZ
   id_verification_tier    VARCHAR(20) NOT NULL DEFAULT 'NONE'
                             CHECK (id_verification_tier IN ('NONE','EMAIL','PHONE','SELFIE_MATCH'))
-  totp_secret_ciphertext  BYTEA
+  totp_secret_ciphertext  BYTEA                         -- AES-GCM under the user's DEK, see user_encryption_keys
   totp_enabled            BOOLEAN NOT NULL DEFAULT FALSE
+  totp_last_used_step     BIGINT                        -- RFC 6238 time step of the newest accepted code, refuses replays
   trust_score             NUMERIC(5,2) NOT NULL DEFAULT 0   -- denormalized read cache, owned by trust module
   trust_score_updated_at  TIMESTAMPTZ
   account_status          VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'
@@ -206,7 +207,16 @@ users
   INDEX idx_users_account_status (account_status) WHERE account_status <> 'ACTIVE'
     -- WHY: admin moderation queries ("show me suspended users") filter on
     -- this constantly; partial index keeps it tiny since >99% of rows are ACTIVE.
+  CHECK (role <> 'ADMIN' OR totp_enabled)
+    -- WHY: an admin account without a second factor cannot exist, so no
+    -- code path (a forgotten check, a hand-run UPDATE) can create one.
+  CHECK (NOT totp_enabled OR totp_secret_ciphertext IS NOT NULL)
+  CHECK (totp_secret_ciphertext IS NULL OR encryption_key_id IS NOT NULL)
+    -- WHY: an encrypted field is useless without the key it names.
 ```
+`totp_last_used_step` was added while building 2FA: without it, a code seen
+over someone's shoulder (or captured by a phishing proxy) stays usable for
+the whole ±30-second window. See "Two-factor authentication" below.
 The 18+ `CHECK` is a hard DB-level floor, not just a signup-form
 validation: a platform whose entire purpose is introducing strangers to
 each other must never admit a minor, and that guarantee can't live only
@@ -243,13 +253,39 @@ user_encryption_keys
     -- the one active DEK; this index makes that a single-row lookup, and
     -- UNIQUE makes "the" active key unambiguous — two active keys for one
     -- user would leave it undefined which one encrypts new data.
+  CHECK (active = (revoked_at IS NULL))
+  CHECK (active = (octet_length(wrapped_dek) > 0))
+    -- WHY: a revoked key is a shredded key. Flipping a flag alone would
+    -- leave the wrapped DEK in the row, and anyone holding the KEK could
+    -- still unwrap it.
 ```
 This table is the hook for crypto-shredding: GDPR/DPDP-style deletion sets
-`active = FALSE, revoked_at = now()` and destroys the unwrapped DEK from
-memory/cache. Every ciphertext column encrypted under that DEK becomes
-permanently unreadable even though the row still physically exists — which
-is what lets us satisfy "delete my data" without breaking foreign keys in
-the ledger/audit tables that must legally stay append-only.
+`active = FALSE, revoked_at = now()` and overwrites `wrapped_dek` with zero
+bytes (the second CHECK makes that the only way to revoke). There is no DEK
+cache to purge: a DEK is unwrapped per use and its bytes zeroed afterwards.
+Every ciphertext column encrypted under that DEK becomes permanently
+unreadable even though the row still physically exists — which is what lets
+us satisfy "delete my data" without breaking foreign keys in the
+ledger/audit tables that must legally stay append-only. Database backups
+taken before the shred still hold the wrapped DEK, so backup retention must
+be no longer than the deletion SLA.
+
+**Envelope encryption.** The KEK is 32 random bytes from `DATA_ENCRYPTION_KEK`
+(base64, no default; the app refuses to start without it). A user's DEK (32
+random bytes) is created the first time one of their fields is encrypted, in
+the same transaction, and `users.encryption_key_id` is pointed at it. Both
+layers are AES-256-GCM with a fresh 96-bit nonce per encryption:
+
+- `wrapped_dek` = `0x01 | KEK fingerprint (first 8 bytes of SHA-256(KEK)) |
+  nonce | ciphertext+tag`, additional data `user_encryption_keys|{id}|{user_id}`.
+- a field = `0x01 | nonce | ciphertext+tag`, additional data
+  `{table}.{column}|{user_id}`.
+
+The additional data pins each ciphertext to its row and column: a value
+copied into another user's row, or into another encrypted column, fails
+authentication instead of decrypting. The fingerprint makes a wrong KEK fail
+loudly at unwrap instead of as a generic tag mismatch, and leaves room to
+rotate the KEK by re-wrapping DEKs (the field ciphertexts never change).
 
 ```sql
 identity_verifications
@@ -355,12 +391,21 @@ owner is emailed a notice. Limits: 5 attempts per code, 10-minute expiry,
 totp_backup_codes
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid()
   user_id     UUID NOT NULL REFERENCES users(id)
-  code_hash   TEXT NOT NULL
+  code_hash   TEXT NOT NULL             -- HMAC-SHA256 under OTP_HMAC_KEY, hex
   used_at     TIMESTAMPTZ
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 
+  CHECK (code_hash ~ '^[0-9a-f]{64}$')
   INDEX idx_backup_codes_user_unused (user_id) WHERE used_at IS NULL
 ```
+Ten codes per set, each 10 characters from a 32-letter alphabet without
+look-alikes (50 random bits), shown as `XXXXX-XXXXX`. `code_hash` is
+HMAC-SHA256 over `totp-backup|user_id|code` under the same server key as
+`otp_codes` (the prefix keeps the two uses apart). 50 bits is too many to
+enumerate per user once a key is involved, and a keyed MAC keeps each check
+to microseconds; Argon2id over ten rows would cost half a second per login
+attempt. Regenerating deletes the old set in the same transaction that
+inserts the new one; disabling 2FA deletes it.
 
 ```sql
 refresh_token_families
@@ -375,7 +420,9 @@ refresh_token_families
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
   revoked_at       TIMESTAMPTZ
-  revoked_reason   VARCHAR(30) CHECK (revoked_reason IN ('LOGOUT','REUSE_DETECTED','REVOKE_ALL_DEVICES','ADMIN'))
+  revoked_reason   VARCHAR(30) CHECK (revoked_reason IN ('LOGOUT','REUSE_DETECTED','REVOKE_ALL_DEVICES',
+                     'ADMIN','SECURITY_CHANGE'))
+  second_factor_verified BOOLEAN NOT NULL DEFAULT FALSE  -- the login passed TOTP or a backup code
 
   CHECK ((revoked_at IS NULL) = (revoked_reason IS NULL))
   CHECK (expires_at > created_at)
@@ -392,6 +439,10 @@ and a session screen that shows a device as signed out while its token still
 works is worse than no screen at all. `last_used_at` and `last_ip_address`
 moved here instead. `device_name`, `last_ip_address`, `last_used_at`,
 `expires_at` and `updated_at` were added at the same time.
+`second_factor_verified` and the `SECURITY_CHANGE` reason came with 2FA: the
+`amr` claim has to survive every refresh, so how the session was signed in is
+recorded on the session itself, and turning 2FA on or off ends the account's
+other sessions under a reason of its own.
 
 **Refresh tokens.** The cookie value is `{family_id}.{secret}`, the secret
 being 32 random bytes as base64url. Only SHA-256 of the whole value is ever
@@ -425,7 +476,9 @@ not happen.
 **Access tokens.** HS256 JWTs, 15 minutes, never longer than the family
 they belong to, with header `typ: at+jwt` and a `kid`. Claims: `iss`,
 `aud`, `sub` (user id), `sid` (family id), `role`, `amr`, `iat`, `exp`,
-`jti`. Every authenticated request checks that `refresh:{sid}` still exists
+`jti`. `amr` (RFC 8176) is `["pwd"]`, or `["pwd","otp"]` when the session's
+login passed a second factor; it is required, must contain `pwd`, and may
+hold no other value. Every authenticated request checks that `refresh:{sid}` still exists
 in Redis, so a revoked session's access tokens stop working immediately
 rather than at expiry, and fails closed with `503` when Redis cannot answer.
 
@@ -445,7 +498,8 @@ login_history
   device_id_hash  VARCHAR(64)                      -- SHA-256 of the device cookie, see below
   success         BOOLEAN NOT NULL
   failure_reason  VARCHAR(30) CHECK (failure_reason IN ('UNKNOWN_EMAIL','BAD_PASSWORD',
-                    'EMAIL_NOT_VERIFIED','ACCOUNT_DISABLED','LOCKED','CAPTCHA_FAILED'))
+                    'EMAIL_NOT_VERIFIED','ACCOUNT_DISABLED','LOCKED','CAPTCHA_FAILED',
+                    'BAD_SECOND_FACTOR'))
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 
   CHECK (success = (failure_reason IS NULL))
@@ -523,6 +577,81 @@ victim's own browser.
 
 The active sessions list is a view over `refresh_token_families` (live and
 not expired), not a table of its own; see that table for why.
+
+**Two-factor authentication (TOTP).** RFC 6238 with the parameters every
+authenticator app defaults to: HMAC-SHA1, 6 digits, 30-second steps from the
+Unix epoch, a 20-byte (160-bit, RFC 4226's recommended length) random secret
+shown as unpadded Base32. Implemented on the JDK's `Mac`, no library.
+
+- **Checking a code**: the steps one before, at and one after now are all
+  computed and compared in constant time, every one of them, whatever matches
+  first. A code is accepted only if its step is greater than
+  `totp_last_used_step`, which is then set to it, under the user row lock: a
+  code cannot be used twice, nor an older code after a newer one.
+- **Setup** (`POST /auth/2fa/setup`, bearer + password): stores a fresh
+  encrypted secret with `totp_enabled = false` and returns the secret and an
+  `otpauth://` URI, once. Nothing changes for login yet. Calling it again
+  before confirming replaces the pending secret (the first QR code stops
+  working); calling it while 2FA is on is refused with `409`, since replacing
+  a live secret is exactly what a stolen session would want to do.
+- **Confirm** (`POST /auth/2fa/confirm`, bearer + a code from the pending
+  secret): turns 2FA on, returns ten backup codes (the only time they are
+  ever shown), ends every other session of the account (`SECURITY_CHANGE`)
+  and emails the owner. The current session stays signed in, still `pwd`
+  only: it was not signed in with a second factor.
+- **Disable** (`POST /auth/2fa/disable`, bearer + password + a TOTP or backup
+  code): clears the secret, the replay step and the backup codes, ends every
+  other session, emails the owner. Refused with `403` for an ADMIN.
+- **Regenerate backup codes** (`POST /auth/2fa/backup-codes`, bearer +
+  password + a code): deletes the old set and returns a new one, emails the
+  owner.
+- The four routes share one bucket per user (10 per 15 minutes); a wrong
+  password or code gets `400 reauthentication_failed` either way, never 401,
+  which would send the client's interceptor off to refresh.
+
+**Login with 2FA.** A correct password for an account with 2FA on (or any
+ADMIN) clears the password lockout as before but opens no session, sets no
+cookie and writes no success row. It answers `{status:
+"SECOND_FACTOR_REQUIRED", secondFactor: {challengeId, expiresIn, methods}}`.
+The challenge ID is 32 random bytes; Redis keeps
+`login-2fa:{sha256(challengeId)} -> {userId, counterKey, attempts, expiresAt}`
+for 5 minutes (checked against the application clock, the key TTL is only
+cleanup). `POST /auth/login/second-factor` with the challenge ID and a TOTP or
+backup code then:
+
+1. charges the challenge one attempt, atomically in Lua; the sixth attempt
+   finds it deleted (`401 login_challenge_expired`: start again with the
+   password);
+2. charges the second-factor lockout counter, `{password counter key}:second-factor`,
+   with the same 5-failure, doubling lock as passwords, so a known
+   password buys at most a handful of code guesses per quarter hour,
+   whichever browser they come from, and the owner's known browser keeps its
+   own counter;
+3. checks the code under the user row lock (a backup code is marked used,
+   the TOTP step recorded), then deletes the challenge, and opens the
+   session in the same transaction, with `second_factor_verified = true`, so
+   two racing submissions open one session between them.
+
+A wrong code writes a `BAD_SECOND_FACTOR` row and answers `401
+invalid_second_factor`. A backup code used to sign in emails the owner with
+the number left.
+
+**Admin routes.** `/api/v1/admin/**` needs `role = ADMIN` *and* `otp` in
+`amr`, checked in the security filter chain, and the service re-reads the
+caller's row (still ADMIN, still active, 2FA still on) because a token's role
+can be up to 15 minutes old. Nothing in the API can grant ADMIN: the operator
+runs an `UPDATE` by hand, and the CHECK above refuses it until the account has
+2FA on.
+
+**Authorization tests.** Every route the application maps is listed in
+`EndpointAuthorizationMatrixIntegrationTest` with its access rule: public,
+self-scoped (acts only on the caller's own account), or admin. The matrix
+calls each one as an anonymous caller, as a second user, and as the owner,
+and a coverage test fails the build when a mapped route has no entry. A
+non-owner gets **404** on any resource addressed by ID, never 403: 403 would
+confirm that the ID exists and belongs to somebody, and IDs leak (shared
+links, logs, screenshots). Role-gated routes (admin) answer 403, because their
+existence is public in the OpenAPI document anyway.
 
 ### 2. Vibe Profile
 
