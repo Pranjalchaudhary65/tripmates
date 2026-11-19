@@ -30,6 +30,16 @@ public final class MailpitClient {
 
     public static final String NEW_DEVICE_SUBJECT = "New sign-in to your TripMates account";
 
+    public static final String TWO_FACTOR_ENABLED_SUBJECT =
+            "Two-factor authentication is now on for your TripMates account";
+
+    public static final String TWO_FACTOR_DISABLED_SUBJECT =
+            "Two-factor authentication was turned off on your TripMates account";
+
+    public static final String BACKUP_CODES_REGENERATED_SUBJECT = "New TripMates backup codes were created";
+
+    public static final String BACKUP_CODE_USED_SUBJECT = "A backup code was used to sign in to TripMates";
+
     private static final Pattern CODE = Pattern.compile("verification code is: (\\d{6})");
 
     private static final Duration TIMEOUT = Duration.ofSeconds(15);
