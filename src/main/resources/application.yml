@@ -139,6 +139,18 @@ tripmate:
       # "none" accepts every request. A real provider registers its own
       # CaptchaVerifier under another value; an unknown value stops startup.
       provider: none
+    encryption:
+      # Base64 of exactly 32 random bytes: the Key Encryption Key that wraps
+      # every user's data key. No default: without it the app refuses to
+      # start rather than encrypt under something guessable.
+      kek: ${DATA_ENCRYPTION_KEK}
+    two-factor:
+      # Shown by authenticator apps next to the code; must not contain ':'.
+      issuer: TripMates
+      # How long a login that passed the password waits for its second factor.
+      challenge-ttl: 5m
+      # Codes one such login accepts before the password is needed again.
+      challenge-max-attempts: 5
     rate-limit:
       # Token buckets, refilled continuously: capacity requests per period.
       login-per-ip:
@@ -161,6 +173,14 @@ tripmate:
         # leaves room for many users behind one NAT address.
         capacity: 60
         period: 10m
+      second-factor-per-ip:
+        capacity: 20
+        period: 10m
+      two-factor-per-account:
+        # Setup, confirm, disable and backup-code changes together, per
+        # signed-in account: each checks a password or a code.
+        capacity: 10
+        period: 15m
 
 management:
   endpoints:
