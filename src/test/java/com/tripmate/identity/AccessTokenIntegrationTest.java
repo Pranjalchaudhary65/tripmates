@@ -18,6 +18,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
@@ -134,7 +135,7 @@ class AccessTokenIntegrationTest {
 
         // The server's own header and signature, around a payload that now says ADMIN.
         assertRejected(api.me(parts[0] + "." + elevatedPayload + "." + parts[2]));
-        assertRejected(api.me(parts[0] + "." + parts[1] + "." + flipLastChar(parts[2])));
+        assertRejected(api.me(parts[0] + "." + parts[1] + "." + flipSignatureBit(parts[2])));
     }
 
     @Test
@@ -235,8 +236,15 @@ class AccessTokenIntegrationTest {
         return jdbc.queryForObject("select id::text from users where email = ?", String.class, email);
     }
 
-    private static String flipLastChar(String value) {
-        char last = value.charAt(value.length() - 1);
-        return value.substring(0, value.length() - 1) + (last == 'A' ? 'B' : 'A');
+    /**
+     * Flips one bit of the decoded signature. Editing the last base64url
+     * character instead is not always a change: a 32-byte signature is 43
+     * characters, and the last one's two low bits are padding that decoding
+     * drops, so swapping it between A, B, C and D leaves the bytes identical.
+     */
+    private static String flipSignatureBit(String signature) {
+        byte[] bytes = Base64.getUrlDecoder().decode(signature);
+        bytes[bytes.length - 1] ^= 0x01;
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 }
