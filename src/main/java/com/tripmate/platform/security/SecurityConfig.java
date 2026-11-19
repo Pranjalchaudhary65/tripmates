@@ -1,9 +1,12 @@
 package com.tripmate.platform.security;
 
+import com.tripmate.identity.controller.AdminUserController;
 import com.tripmate.identity.controller.LoginController;
 import com.tripmate.identity.controller.RegistrationController;
 import com.tripmate.identity.controller.SessionController;
+import com.tripmate.identity.entity.Role;
 import com.tripmate.identity.service.SessionService;
+import com.tripmate.identity.token.AccessTokenClaims;
 import com.tripmate.identity.token.AccessTokenDecoderConfig;
 import com.tripmate.identity.token.SessionLivenessFilter;
 import com.tripmate.platform.web.ApiPaths;
@@ -14,6 +17,9 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.authorization.AuthorityAuthorizationManager;
+import org.springframework.security.authorization.AuthorizationManager;
+import org.springframework.security.authorization.AuthorizationManagers;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -25,6 +31,7 @@ import org.springframework.security.oauth2.server.resource.web.authentication.Be
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
+import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 import org.springframework.security.web.header.HeaderWriterFilter;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.util.matcher.OrRequestMatcher;
@@ -41,6 +48,8 @@ import java.util.List;
  * Every other path - including /api/v1 paths that do not exist - needs a
  * valid bearer access token whose session is still alive, and answers 401
  * otherwise, so an anonymous caller cannot probe which endpoints exist.
+ * /api/v1/admin/** further needs an ADMIN whose session passed a second
+ * factor, and answers 403 to everyone else who is signed in.
  *
  * <p>Filter order inside the chain: response headers, then CORS (a
  * preflight is answered before anything else), then the CSRF header check
@@ -75,6 +84,19 @@ public class SecurityConfig {
     /** The one route that acts on a cookie and changes state, so the one that needs a CSRF check. */
     static final String REFRESH_ROUTE = ApiPaths.V1 + SessionController.BASE + SessionController.REFRESH;
 
+    /** Every admin route, present and future, whatever its method. */
+    static final String ADMIN_ROUTES = ApiPaths.V1 + AdminUserController.ADMIN_BASE + "/**";
+
+    /**
+     * An ADMIN token is not enough on its own: the session must also have
+     * passed a second factor ({@code otp} in amr). A password-only session of
+     * an admin account - opened before it was promoted, say - is refused.
+     */
+    static final AuthorizationManager<RequestAuthorizationContext> ADMIN_WITH_SECOND_FACTOR = AuthorizationManagers.allOf(
+            AuthorityAuthorizationManager.hasRole(Role.ADMIN.name()),
+            AuthorityAuthorizationManager.hasAuthority(
+                    AccessTokenClaims.AUTH_METHOD_AUTHORITY_PREFIX + AccessTokenClaims.OTP_METHOD));
+
     @Bean
     SecurityFilterChain apiSecurityFilterChain(
             HttpSecurity http,
@@ -99,6 +121,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers(publicRoutes).permitAll()
+                        .requestMatchers(PathPatternRequestMatcher.pathPattern(ADMIN_ROUTES))
+                        .access(ADMIN_WITH_SECOND_FACTOR)
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(resourceServer -> resourceServer
                         .bearerTokenResolver(ignoringAuthorizationOn(publicRoutes))
