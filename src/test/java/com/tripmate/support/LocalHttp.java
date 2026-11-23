@@ -61,6 +61,13 @@ public final class LocalHttp {
         return send(builder, headerNameValuePairs);
     }
 
+    public HttpResponse<String> putJson(String path, String json, String... headerNameValuePairs) {
+        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(baseUrl + path))
+                .header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString(json));
+        return send(builder, headerNameValuePairs);
+    }
+
     public HttpResponse<String> post(String path, String... headerNameValuePairs) {
         return send(HttpRequest.newBuilder(URI.create(baseUrl + path))
                 .POST(HttpRequest.BodyPublishers.noBody()), headerNameValuePairs);
