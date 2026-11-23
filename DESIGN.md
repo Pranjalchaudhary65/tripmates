@@ -204,6 +204,17 @@ users
     -- WHY: lets us enforce "one account per phone number" and look up by
     -- phone (e.g. OTP login) with an equality match on an HMAC, without
     -- ever decrypting phone_ciphertext for a read-path lookup.
+  UNIQUE INDEX idx_users_phone_verified_unique (phone_blind_index)
+    WHERE phone_verified_at IS NOT NULL AND deleted_at IS NULL
+    -- WHY: one live account per verified number; an unconfirmed number may
+    -- sit on several accounts, since nobody has proven they hold it.
+  CHECK ((phone_ciphertext IS NULL) = (phone_blind_index IS NULL))
+  CHECK (phone_ciphertext IS NULL OR encryption_key_id IS NOT NULL)
+  CHECK (phone_verified_at IS NULL OR phone_ciphertext IS NOT NULL)
+  CHECK (id_verification_tier = 'NONE' OR (email_verified_at IS NOT NULL
+         AND (tier NOT IN ('PHONE','SELFIE_MATCH') OR phone_verified_at IS NOT NULL)
+         AND (tier <> 'SELFIE_MATCH' OR profile_photo_key IS NOT NULL)))   -- ck_users_tier_evidence
+    -- WHY: the tier is only ever as high as the evidence on the row.
   INDEX idx_users_account_status (account_status) WHERE account_status <> 'ACTIVE'
     -- WHY: admin moderation queries ("show me suspended users") filter on
     -- this constantly; partial index keeps it tiny since >99% of rows are ACTIVE.
@@ -298,17 +309,33 @@ identity_verifications
   purge_due_at        TIMESTAMPTZ                  -- SELFIE_MATCH only: created_at + retention window (default 7 days)
   purged_at           TIMESTAMPTZ
   reviewer_id         UUID REFERENCES users(id)     -- admin, only for flagged/ambiguous SELFIE_MATCH cases — most are auto-decided
-  rejection_reason    TEXT
+  rejection_reason    VARCHAR(30) CHECK (rejection_reason IN ('LIVENESS_FAILED','LOW_SIMILARITY',
+                        'REVIEWER_REJECTED','PROFILE_PHOTO_CHANGED','REVIEW_EXPIRED'))
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
   reviewed_at         TIMESTAMPTZ
 
+  CHECK (tier <> 'PHONE' OR (similarity_score, selfie_image_key, purge_due_at, purged_at all NULL))
+  CHECK (tier <> 'SELFIE_MATCH' OR purge_due_at IS NOT NULL)
+  CHECK (purged_at IS NULL OR selfie_image_key IS NULL)
+  CHECK ((status = 'PENDING') = (reviewed_at IS NULL))
+  CHECK ((status = 'REJECTED') = (rejection_reason IS NOT NULL))
+  CHECK (reviewer_id IS NULL OR reviewer_id <> user_id)
   INDEX idx_idverif_user_tier_status (user_id, tier, status)
     -- WHY: "does this user have a pending SELFIE_MATCH review" and the
-    -- admin review queue ("all flagged PENDING, oldest first") both hit this.
+    -- verification centre's "newest attempt" both hit this.
   INDEX idx_idverif_purge_due (purge_due_at) WHERE selfie_image_key IS NOT NULL
     -- WHY: the scheduled purge job's only query — rows still holding an
     -- image key whose retention window has passed, regardless of status.
+  UNIQUE INDEX idx_idverif_one_pending_selfie (user_id) WHERE tier = 'SELFIE_MATCH' AND status = 'PENDING'
+    -- WHY: two submissions racing each other cannot both land in the queue.
+  INDEX idx_idverif_pending_queue (created_at) WHERE tier = 'SELFIE_MATCH' AND status = 'PENDING'
+    -- WHY: the admin review queue, oldest (closest to purge) first.
 ```
+`rejection_reason` was first designed as free `TEXT`. It became a fixed
+list while building the review queue: whatever a reviewer typed would be
+shown on the user's screen, and a fixed list is the only way to be sure
+nothing a moderator writes (or pastes) reaches a user. The CHECKs, the
+one-pending index and the queue index were added at the same time.
 There is no document pipeline here at all — no document type, no scanned
 number, no retention beyond a verification decision. `tier = 'PHONE'` rows
 never have an image; `tier = 'SELFIE_MATCH'` rows hold `selfie_image_key`
@@ -349,6 +376,84 @@ insert. The cap exists so one account can't become a mass-vouching hub
 that launders trust for a ring of fake accounts; "skin in the game" only
 works as a signal if vouching is scarce and costly to the voucher. See
 Trust Score Engine → Vouching for the bonus/penalty mechanics.
+
+Because of `UNIQUE (voucher_user_id, vouched_user_id)` a pair has one row
+for good: withdrawing sets `revoked_at`, and vouching again for the same
+person reopens that row with a new `created_at`. A vouch is withdrawn by its
+own ID, and to anyone but its voucher that ID answers 404. The voucher sees
+only the first name of the person they vouch for; the vouched person sees a
+count, not who.
+
+**Verification tiers, as built.** Each tier needs the one below it:
+EMAIL (verified email) → PHONE (a code sent to the number confirmed) →
+SELFIE_MATCH (a live selfie matched against the profile photo). The tier
+column never runs ahead of the evidence on the row; `ck_users_tier_evidence`
+refuses PHONE without `phone_verified_at` and SELFIE_MATCH without a
+`profile_photo_key`, whatever writes it. Every tier change writes a
+`VERIFICATION_TIER_CHANGE` outbox event in the same transaction (email
+verification included).
+
+- **Phone.** The number is normalised to E.164 (a 10-digit number starting
+  6-9 is read as Indian), stored as `phone_ciphertext` under the user's DEK
+  (`users.phone_ciphertext|{user_id}` additional data) and as
+  `phone_blind_index` = HMAC-SHA256 under `PHONE_BLIND_INDEX_KEY`, a key of
+  its own. Codes reuse `otp_codes` with `channel = 'PHONE'` and the email
+  code rules. A code is sent to any well-formed number; only after the right
+  code comes back is the caller told the number is verified on another
+  account (`phone_in_use`), so the route is no lookup of registered numbers.
+  `UNIQUE INDEX idx_users_phone_verified_unique (phone_blind_index) WHERE
+  phone_verified_at IS NOT NULL AND deleted_at IS NULL` settles two accounts
+  confirming one number at the same moment. Delivery is a `PhoneCodeSender`;
+  the default `mailbox` sender puts the "SMS" in the account's email inbox
+  so the demo needs no SMS account, and startup warns that it proves nothing
+  about the phone. A verified number cannot be replaced yet.
+- **Profile photo and selfie images.** Every upload is checked by magic
+  bytes (JPEG or PNG only), size (5 MB, refused by the multipart limit
+  before it is read) and header dimensions (64-4096 px, read before any
+  pixel is decoded), then decoded with metadata ignored and re-encoded as a
+  new JPEG, at most 1280 px on the long side. The original bytes are never
+  stored, so EXIF (GPS included) cannot survive. Files go to an
+  `ObjectStorage` (local disk under `uploads/` by default) under random
+  `profile-photos/{uuid}.jpg` / `selfies/{uuid}.jpg` keys. They are reached
+  only through signed links: `/api/v1/media/{token}`, the token being
+  `base64url(key|expiry).base64url(HMAC-SHA256)` under
+  `MEDIA_URL_SIGNING_KEY`, valid 5 minutes, handed only to the owner (their
+  profile photo) or a reviewer (a flagged selfie and the photo beside it).
+  Replacing the profile photo drops a SELFIE_MATCH account to PHONE and
+  withdraws a pending selfie (`PROFILE_PHOTO_CHANGED`): both were judged
+  against a picture that is no longer shown.
+- **Selfie check.** `POST /verification/selfie/challenge` picks a prompt
+  (turn left/right, smile, blink) and stores a single-use, 2-minute
+  challenge in Redis (`selfie-check:{sha256(id)}`), bound to the account.
+  The client sends two frames captured in the app: one looking at the
+  camera, one following the prompt. A `LivenessVerifier` (outside any
+  transaction, since a real one is a network call) returns `live` and a 0-1
+  `similarity`; not live is REJECTED (`LIVENESS_FAILED`), similarity ≥ 0.85
+  APPROVED, below 0.60 REJECTED (`LOW_SIMILARITY`), in between PENDING for a
+  reviewer. Only the neutral frame is stored; the score is never shown to
+  the user, since an exact number lets someone tune a borrowed photo until
+  it passes. Five submissions per account per day. The default `mock`
+  verifier compares difference hashes of the images, not faces, and says so
+  at startup.
+- **Purge.** A scheduled job (hourly) deletes every image past
+  `purge_due_at`, file first and row second, rows claimed with `FOR UPDATE
+  SKIP LOCKED`. A selfie still PENDING at that point is rejected as
+  `REVIEW_EXPIRED`: nothing may stay in the queue without its evidence.
+- **Review queue.** `/admin/verifications` lists PENDING selfies oldest
+  first; a decision is APPROVE or REJECT only (no free text), the owner's
+  row is locked before the verification's (the order every writer uses),
+  and nobody can decide their own (`ck_idverif_reviewer_not_self` backs the
+  service check).
+
+**Outbox and append-only, open question.** "Append-only enforcement" above
+lists `outbox_events` among the tables with no `UPDATE` grant, but the table
+also carries `processed_at` and `attempts`, which the relay has to update.
+The outbox was created while building the verification tiers (they are its
+first writers); the relay and the grants arrive with the trust score
+scheduler, which has to settle this: either a separate
+`outbox_deliveries` table for the relay's bookkeeping, keeping
+`outbox_events` truly insert-only, or an explicit exception for those two
+columns. No grants are applied to it yet.
 
 ```sql
 otp_codes
