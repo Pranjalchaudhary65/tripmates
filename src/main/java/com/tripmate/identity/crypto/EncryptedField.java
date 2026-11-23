@@ -7,7 +7,9 @@ package com.tripmate.identity.crypto;
  */
 public enum EncryptedField {
 
-    TOTP_SECRET("users.totp_secret_ciphertext");
+    TOTP_SECRET("users.totp_secret_ciphertext"),
+
+    PHONE("users.phone_ciphertext");
 
     private final String column;
 
