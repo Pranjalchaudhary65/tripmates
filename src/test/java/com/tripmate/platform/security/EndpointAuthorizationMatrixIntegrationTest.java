@@ -15,6 +15,7 @@ import com.tripmate.support.MutableClock;
 import com.tripmate.support.ProblemScenarioController;
 import com.tripmate.support.TestAuthenticator;
 import com.tripmate.support.TestImages;
+import com.tripmate.vibe.VibeApi;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -117,6 +118,18 @@ class EndpointAuthorizationMatrixIntegrationTest {
             Route.self("POST", "/api/v1/vouches", Setup.CAN_VOUCH, 201, actor -> """
                     {"vouchedUserId":"%s"}""".formatted(actor.extra("vouchTarget"))),
             Route.owned("DELETE", "/api/v1/vouches/{vouchId}", Setup.VOUCHING, "vouchId", 204),
+
+            Route.self("GET", "/api/v1/vibe/quiz", Setup.SIGNED_IN, 200, Route.NO_BODY),
+            Route.self("PUT", "/api/v1/vibe/quiz/draft", Setup.SIGNED_IN, 200,
+                    actor -> VibeApi.json(Map.of("budget-stay", "b"))),
+            Route.self("POST", "/api/v1/vibe/quiz/submit", Setup.SIGNED_IN, 200,
+                    actor -> VibeApi.json(VibeApi.FIRST_OPTIONS)),
+            Route.self("GET", "/api/v1/vibe/profile", Setup.SIGNED_IN, 200, Route.NO_BODY),
+            Route.self("PUT", "/api/v1/vibe/profile", Setup.VIBE_TAKEN, 200, actor -> """
+                    {"budgetBand":"MID","pace":"SLOW","wakeTime":"AVERAGE","planningStyle":"ROUGH_PLAN",
+                     "socialEnergy":3,"riskAppetite":3,"foodAdventurousness":3,"expenseSplitStyle":"STRICT_SPLIT"}"""),
+            Route.self("PUT", "/api/v1/vibe/deal-breakers", Setup.SIGNED_IN, 200, actor -> """
+                    {"smoking":"NO","drinking":"OK","genderPreference":"ANY","minTrustScore":20}"""),
 
             Route.admin("GET", "/api/v1/admin/users/{userId}", 200, Route.NO_BODY),
             Route.admin("GET", "/api/v1/admin/verifications", 200, Route.NO_BODY),
@@ -328,7 +341,7 @@ class EndpointAuthorizationMatrixIntegrationTest {
             case "GET" -> http.get(path, headerArray);
             case "DELETE" -> http.delete(path, headerArray);
             case "POST" -> json == null ? http.post(path, headerArray) : http.postJson(path, json, headerArray);
-            case "PUT" -> http.multipart("PUT", path, List.of(), headerArray);
+            case "PUT" -> http.putJson(path, json == null ? "{}" : json, headerArray);
             default -> throw new IllegalArgumentException("No request builder for " + route.method());
         };
     }
@@ -366,6 +379,10 @@ class EndpointAuthorizationMatrixIntegrationTest {
                 if (setup == Setup.SELFIE_STARTED) {
                     extras.put("challengeId", verification.challengeId(token));
                 }
+            }
+            case VIBE_TAKEN -> {
+                HttpResponse<String> taken = new VibeApi(http).submit(token, VibeApi.FIRST_OPTIONS);
+                assertThat(taken.statusCode()).as(taken.body()).isEqualTo(200);
             }
             case CAN_VOUCH, VOUCHING -> {
                 verification.reachSelfieMatch(email, token);
@@ -411,7 +428,7 @@ class EndpointAuthorizationMatrixIntegrationTest {
         String bearer = "Bearer " + owner.accessToken();
         List<String> bodies = new ArrayList<>();
         for (String path : List.of("/api/v1/users/me", "/api/v1/auth/2fa", "/api/v1/auth/sessions",
-                "/api/v1/verification", "/api/v1/vouches")) {
+                "/api/v1/verification", "/api/v1/vouches", "/api/v1/vibe/profile", "/api/v1/vibe/quiz")) {
             HttpResponse<String> response = owner.http().get(path, "Authorization", bearer);
             assertThat(response.statusCode()).as("owner reading %s: %s", path, response.body()).isEqualTo(200);
             bodies.add(SIGNED_LINK.matcher(response.body()).replaceAll("\"profilePhoto\":{}"));
@@ -489,7 +506,9 @@ class EndpointAuthorizationMatrixIntegrationTest {
         /** SELFIE_MATCH, with another account to vouch for; extra vouchTarget. */
         CAN_VOUCH,
         /** SELFIE_MATCH and vouching for another account; extras vouchTarget and vouchId. */
-        VOUCHING
+        VOUCHING,
+        /** The vibe quiz finished, so there is a profile to adjust. */
+        VIBE_TAKEN
     }
 
     /**
