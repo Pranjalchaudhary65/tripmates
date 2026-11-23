@@ -70,16 +70,16 @@ Deadline: 2026-11-30.
 - [ ] Redeploy script/workflow established here gets reused after every later step, not rebuilt at Step 13
 
 ## Step 4a — Verification tiers backend: phone OTP, selfie match, vouching
-- [ ] Phone field: AES-GCM envelope encryption + blind index, phone OTP tier
-- [ ] identity_verifications table (PHONE, SELFIE_MATCH only — no document fields, no document upload pipeline)
-- [ ] Selfie upload pipeline (magic-byte check, size cap, randomized storage name, EXIF strip, signed URL
+- [x] Phone field: AES-GCM envelope encryption + blind index, phone OTP tier
+- [x] identity_verifications table (PHONE, SELFIE_MATCH only — no document fields, no document upload pipeline)
+- [x] Selfie upload pipeline (magic-byte check, size cap, randomized storage name, EXIF strip, signed URL
       retrieval), compared against profile_photo_key
-- [ ] Mock `LivenessVerifier` interface (liveness signal + similarity score, auto-decide with admin fallback
+- [x] Mock `LivenessVerifier` interface (liveness signal + similarity score, auto-decide with admin fallback
       for flagged/ambiguous cases only) behind a pluggable interface
-- [ ] Scheduled selfie-purge job (default 7-day retention) + test proving no image key survives past
+- [x] Scheduled selfie-purge job (default 7-day retention) + test proving no image key survives past
       purge_due_at in a terminal state
-- [ ] vouches table; vouch create/revoke endpoints (requires voucher at SELFIE_MATCH tier, capped active count)
-- [ ] id_verification_tier + vouch bonus/penalty drive Trust Score input events
+- [x] vouches table; vouch create/revoke endpoints (requires voucher at SELFIE_MATCH tier, capped active count)
+- [x] id_verification_tier + vouch bonus/penalty drive Trust Score input events
 
 ## Step 4b — Verification frontend: verification centre
 - [ ] Tier progress bar (NONE/EMAIL/PHONE/SELFIE_MATCH — no document step), phone OTP entry, selfie

@@ -132,3 +132,16 @@ One line per commit: what I built, and the key decision behind it.
   keeps it, so an outage never logs everyone out. Kept the second-factor
   challenge ID in memory only and accepted that a reload loses it, and
   followed return paths only when they start with a single "/".
+- **Step 4a** — Built the PHONE and SELFIE_MATCH tiers, profile photos,
+  vouching, the admin review queue and the outbox the trust score will read.
+  Sent a phone code to any well-formed number and said "already verified
+  elsewhere" only after the right code came back, so the route can't be used
+  to look up which numbers have accounts. Re-encoded every upload into a new
+  JPEG from its pixels over stripping EXIF tags, so nothing from the original
+  file can survive, and served images through 5-minute HMAC-signed links
+  because an img tag can't send a bearer token. Never showed users their
+  similarity score, so the matcher can't be used to tune a borrowed photo,
+  and dropped SELFIE_MATCH whenever the profile photo changes. Made
+  rejection reasons a fixed list instead of reviewer text. Left the outbox
+  without append-only grants for now, since the relay has to update
+  processed_at, and noted that for the trust score step to settle.
