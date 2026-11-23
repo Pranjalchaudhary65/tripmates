@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { routes } from './router';
+import { useAuthStore } from './stores/authStore';
 
 function renderAt(path: string) {
   const router = createMemoryRouter(routes, { initialEntries: [path] });
@@ -10,6 +11,10 @@ function renderAt(path: string) {
 }
 
 describe('routes', () => {
+  beforeEach(() => {
+    useAuthStore.getState().clearSession();
+  });
+
   afterEach(() => {
     cleanup();
   });
@@ -29,6 +34,24 @@ describe('routes', () => {
     renderAt(path);
 
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(heading);
+  });
+
+  it.each(['/account/security', '/account/sessions', '/admin/users'])(
+    'sends a signed-out visitor from %s to login',
+    (path) => {
+      renderAt(path);
+
+      expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Log in');
+    },
+  );
+
+  it('shows only a loading screen until the start-up refresh answers', () => {
+    useAuthStore.setState({ status: 'starting' });
+
+    renderAt('/');
+
+    expect(screen.getByRole('status').textContent).toBe('Loading TripMates…');
+    expect(screen.queryByRole('heading')).toBeNull();
   });
 
   it('renders the not-found page for an unknown path', () => {
