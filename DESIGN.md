@@ -797,6 +797,45 @@ happens, and keeping them physically separate makes it obvious in the
 repository layer which query is the cheap filter and which is the
 expensive weighted-score pass.
 
+**As built.** Three additions while building the quiz:
+
+- `vibe_profiles.quiz_version SMALLINT NOT NULL` says which question set
+  `raw_answers` answered, so a re-score knows what it is reading.
+  `vibe_profiles.adjusted_at TIMESTAMPTZ` is set when the user corrects a
+  dimension by hand; a re-score leaves such a row alone rather than undo the
+  user's own edit, and retaking the quiz clears it.
+- `deal_breakers` gets `created_at`/`updated_at`, as every mutable table does.
+- A new table holds a quiz in progress, so the 12-15 question form can be
+  finished later or on another device. The client keeps nothing in browser
+  storage (lint forbids it):
+
+```sql
+vibe_quiz_drafts
+  user_id       UUID PRIMARY KEY REFERENCES users(id)
+  quiz_version  SMALLINT NOT NULL
+  answers       JSONB NOT NULL CHECK (jsonb_typeof(answers) = 'object')
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+**The quiz** (`vibe.service.VibeQuiz`, version 1) has 14 questions defined
+on the server, each feeding exactly one dimension: two each for budget,
+pace, wake time, planning, social energy and risk; one each for food and
+expenses. Each option carries a number on its dimension's scale (enum
+position, or 1-5); a dimension with two questions takes their mean, rounded
+half up in exact arithmetic. A reversed statement ("I need time on my own")
+has its options numbered in reverse, so scoring has no special cases. The
+expense question names its category directly: the three ways of splitting
+costs have no order to average. Option numbers are never sent to the client.
+Submitting replaces the profile (and any hand adjustment) and deletes the
+draft; every profile or deal-breaker change writes `VIBE_PROFILE_CHANGED` or
+`DEAL_BREAKERS_CHANGED` to the outbox for match-cache invalidation.
+
+**Habit deal-breakers** (`smoking`, `drinking`) are from the user's own side:
+`NO` = "I want a trip without it", `OK` = "it will be part of my trip",
+`EITHER` = no preference. Matching treats NO against OK as incompatible and
+EITHER as compatible with both. The column names alone did not say this, so
+it is written down here for the matching step.
+
 ### 3. Trips & Membership
 
 ```sql
