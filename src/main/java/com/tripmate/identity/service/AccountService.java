@@ -5,6 +5,7 @@ import com.tripmate.identity.repository.UserRepository;
 import com.tripmate.identity.token.SessionPrincipal;
 import org.springframework.security.oauth2.server.resource.InvalidBearerTokenException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /** Reads of the caller's own account. The user ID always comes from the verified token, never from the request. */
@@ -26,5 +27,24 @@ public class AccountService {
         return users.findById(caller.userId())
                 .filter(User::isActive)
                 .orElseThrow(() -> new InvalidBearerTokenException("Account is not active"));
+    }
+
+    /**
+     * For other modules writing rows that belong to the caller: checks the
+     * account is still active and locks its row for the rest of the
+     * caller's transaction, so two writes for one user queue up instead of
+     * racing. Hands back nothing of the account itself.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void lockActive(SessionPrincipal caller) {
+        users.findByIdForUpdate(caller.userId())
+                .filter(User::isActive)
+                .orElseThrow(() -> new InvalidBearerTokenException("Account is not active"));
+    }
+
+    /** The read-only counterpart of {@link #lockActive}, for other modules' reads. */
+    @Transactional(readOnly = true)
+    public void requireActive(SessionPrincipal caller) {
+        currentUser(caller);
     }
 }
