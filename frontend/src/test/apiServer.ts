@@ -101,6 +101,28 @@ export function apiGet(path: string, resolver: HttpResponseResolver, options: Co
   });
 }
 
+/** A PUT handler under the API base URL, with the backend's CORS headers. */
+export function apiPut(path: string, resolver: HttpResponseResolver, options: CorsOptions = {}) {
+  return http.put(`${API_BASE_URL}${path}`, async (info) => {
+    const response = await resolver(info);
+    if (!(response instanceof Response)) {
+      throw new Error(`Handler for ${path} must return a Response.`);
+    }
+    return withCors(response, options);
+  });
+}
+
+/** A DELETE handler under the API base URL, with the backend's CORS headers. */
+export function apiDelete(path: string, resolver: HttpResponseResolver, options: CorsOptions = {}) {
+  return http.delete(`${API_BASE_URL}${path}`, async (info) => {
+    const response = await resolver(info);
+    if (!(response instanceof Response)) {
+      throw new Error(`Handler for ${path} must return a Response.`);
+    }
+    return withCors(response, options);
+  });
+}
+
 /** An MSW server that also answers CORS preflights the way the backend does. */
 export function createApiServer() {
   return setupServer(
