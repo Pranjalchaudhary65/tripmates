@@ -63,6 +63,9 @@ const SERVER_WORDED_CODES: ReadonlySet<string> = new Set([
   'cannot_vouch_for_self',
   'verification_already_decided',
   'cannot_review_own_verification',
+  'invalid_quiz_answer',
+  'quiz_incomplete',
+  'vibe_profile_missing',
 ]);
 
 /**
