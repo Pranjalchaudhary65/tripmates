@@ -133,6 +133,60 @@ export function validateVerificationCode(code: string): string | null {
   return VERIFICATION_CODE.test(code) ? null : 'Enter the 6-digit code from the email.';
 }
 
+/** How a second factor is entered: the authenticator app's current code, or one backup code. */
+export type SecondFactorMethod = 'totp' | 'backup';
+
+/** SecondFactorLoginRequest and TwoFactorChangeRequest: @Size(max = 32) on code. */
+export const SECOND_FACTOR_CODE_MAX_LENGTH = 32;
+
+const TOTP_CODE = /^\d{6}$/;
+
+/** BackupCodes.NORMALISED: ten characters of Crockford's Base32. */
+const BACKUP_CODE = /^[0-9A-HJKMNP-TV-Z]{10}$/;
+
+/**
+ * The backend's reading of a typed backup code: case, spaces and the hyphen
+ * ignored, O read as 0 and I or L as 1. Used to check the shape only; the
+ * code is sent as typed and the server normalises it again.
+ */
+export function normaliseBackupCode(code: string): string {
+  return code.toUpperCase().replace(/[-\s]/g, '').replace(/O/g, '0').replace(/[IL]/g, '1');
+}
+
+export function validateSecondFactorCode(code: string, method: SecondFactorMethod): string | null {
+  const trimmed = code.trim();
+  if (method === 'totp') {
+    return TOTP_CODE.test(trimmed) ? null : 'Enter the 6-digit code from your authenticator app.';
+  }
+  return BACKUP_CODE.test(normaliseBackupCode(trimmed))
+    ? null
+    : 'Enter one of your backup codes: 10 letters and digits, like 7KQ2M-X9PDA.';
+}
+
+/** TwoFactorConfirmRequest: @Pattern("\\d{6}"). */
+export function validateTotpCode(code: string): string | null {
+  return validateSecondFactorCode(code, 'totp');
+}
+
+/** TwoFactorSetupRequest and TwoFactorChangeRequest: @NotEmpty @Size(max = 128) on password. */
+export function validateCurrentPassword(password: string): string | null {
+  if (password === '') {
+    return 'Enter your password.';
+  }
+  return password.length > PASSWORD_MAX_LENGTH ? `Use at most ${String(PASSWORD_MAX_LENGTH)} characters.` : null;
+}
+
+/**
+ * TwoFactorChangeRequest's code accepts either kind, so the shape check
+ * does too; a backup code entered here is spent like at sign-in.
+ */
+export function validateAnySecondFactorCode(code: string): string | null {
+  if (validateSecondFactorCode(code, 'totp') === null || validateSecondFactorCode(code, 'backup') === null) {
+    return null;
+  }
+  return 'Enter the current code from your authenticator app, or one of your backup codes.';
+}
+
 /** Today's date in India as yyyy-MM-dd. */
 export function todayIn(timeZone: string, now: Date = new Date()): string {
   const parts = new Intl.DateTimeFormat('en-US', {

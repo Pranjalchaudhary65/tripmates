@@ -5,7 +5,7 @@ import { FormField, inputClassName } from '../components/FormField';
 import { SubmitButton } from '../components/SubmitButton';
 import { useRequestFailure } from '../hooks/useRequestFailure';
 import { useSubmission } from '../hooks/useSubmission';
-import { useAuthStore } from '../stores/authStore';
+import { useAuthStore, type SignOutReason } from '../stores/authStore';
 import {
   EMAIL_MAX_LENGTH,
   PASSWORD_MAX_LENGTH,
@@ -16,6 +16,11 @@ import {
 
 const LOGIN_FIELDS: readonly LoginField[] = ['email', 'password'];
 
+const SIGN_OUT_NOTICES: Record<SignOutReason, string> = {
+  expired: 'Your session has ended. Log in again to continue.',
+  revokedAll: 'You signed out of every device. Log in again to continue on this one.',
+};
+
 function arrivedAfterVerification(state: unknown): boolean {
   return typeof state === 'object' && state !== null && 'notice' in state && state.notice === 'email-verified';
 }
@@ -24,6 +29,7 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const login = useAuthStore((state) => state.login);
+  const signOutReason = useAuthStore((state) => state.signOutReason);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [clientErrors, setClientErrors] = useState<FieldErrors<LoginField>>({});
@@ -57,7 +63,12 @@ export function LoginPage() {
       }
       const result = await login(body);
       if (result.ok) {
-        void navigate('/', { replace: true });
+        // A session is picked up by GuestOnly, which sends the user on to
+        // where they were headed; a challenge needs the code first.
+        if (result.next === 'secondFactor') {
+          const returnState: unknown = location.state;
+          void navigate('/login/second-factor', { state: returnState });
+        }
         return;
       }
       if (result.failure.status === 401) {
@@ -72,6 +83,11 @@ export function LoginPage() {
       <h1 className="text-2xl font-bold text-teal-800">Log in</h1>
 
       <form noValidate onSubmit={handleSubmit} className="mt-6 space-y-4">
+        {signOutReason !== null && server.notice === null && (
+          <p role="status" className="rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            {SIGN_OUT_NOTICES[signOutReason]}
+          </p>
+        )}
         {justVerified && server.notice === null && (
           <p role="status" className="rounded-md bg-teal-50 px-4 py-3 text-sm text-teal-900">
             Your email address is verified. You can log in now.

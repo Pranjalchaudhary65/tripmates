@@ -39,6 +39,14 @@ const SERVER_WORDED_CODES: ReadonlySet<string> = new Set([
   'invalid_credentials',
   'captcha_required',
   'temporarily_unavailable',
+  'invalid_second_factor',
+  'login_challenge_expired',
+  'reauthentication_failed',
+  'invalid_totp_code',
+  'two_factor_already_enabled',
+  'two_factor_not_enabled',
+  'two_factor_setup_not_started',
+  'two_factor_required_for_admin',
 ]);
 
 /**

@@ -1,18 +1,29 @@
 // @vitest-environment jsdom
 import { HttpResponse } from 'msw';
-import { apiPost, authenticated, createApiServer } from '../test/apiServer';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installAuthInterceptors, REFRESH_PATH } from '../api/authRefresh';
 import { apiClient } from '../api/client';
 import type { RegistrationBody } from '../api/identityApi';
 import { FALLBACK_RETRY_AFTER_SECONDS } from '../api/problem';
-import { useAuthStore } from './authStore';
+import {
+  accessGrant,
+  apiPost,
+  authenticated,
+  createApiServer,
+  fakeAccessToken,
+  problem,
+  secondFactorRequired,
+} from '../test/apiServer';
+import { provideSessionRefresher, useAuthStore } from './authStore';
 
 const USER = { id: 'u-1', role: 'USER', verificationTier: 'PHONE' } as const;
 const CHALLENGE_MESSAGE = 'If this email address can be used, a verification code has been sent to it.';
 const FIRST_ID = '5b0c6f1e-6a3e-4c55-9d7a-1f2e3d4c5b6a';
 const SECOND_ID = '9e8d7c6b-5a49-4382-a716-1b2c3d4e5f60';
 const USER_ID = '0d4a3c1e-8f7b-4e2a-9c6d-5b4a3f2e1d0c';
+const CHALLENGE_ID = 'Zm9yLXRlc3RzLW9ubHktbm90LWEtcmVhbC1jaGFsbGVuZ2U';
+const INVALID_SECOND_FACTOR =
+  'That code is not valid. Enter the current code from your authenticator app, or an unused backup code.';
 
 const REGISTRATION: RegistrationBody = {
   email: 'asha.verma@example.com',
@@ -27,19 +38,20 @@ const refreshCalls: Request[] = [];
 
 beforeAll(() => {
   server.listen({ onUnhandledFrame: 'error' });
-  // The interceptors main.tsx installs, so these tests see what the app sees.
-  installAuthInterceptors(apiClient, { onSessionExpired: vi.fn() });
+  // What main.tsx wires up, so these tests see what the app sees.
+  provideSessionRefresher(installAuthInterceptors(apiClient, { onSessionExpired: vi.fn() }));
 });
 
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
   refreshCalls.length = 0;
-  useAuthStore.setState({ accessToken: null, user: null, confirmedCredentials: null, pendingVerification: null });
+  useAuthStore.getState().clearSession();
+  useAuthStore.setState({ pendingVerification: null });
   server.use(
     apiPost(REFRESH_PATH, ({ request }) => {
       refreshCalls.push(request);
-      return HttpResponse.json({ accessToken: 'should-never-be-used' });
+      return problem(401, 'invalid_refresh_token', 'Your session has ended. Log in again.');
     }),
   );
 });
@@ -56,40 +68,105 @@ function challenge(verificationId: string) {
   return HttpResponse.json({ verificationId, message: CHALLENGE_MESSAGE }, { status: 202 });
 }
 
+function expectNothingInBrowserStorage(...secrets: string[]) {
+  expect(localStorage).toHaveLength(0);
+  expect(sessionStorage).toHaveLength(0);
+  for (const secret of secrets) {
+    expect(document.cookie).not.toContain(secret);
+    expect(window.location.href).not.toContain(secret);
+  }
+}
+
+async function startSecondFactor() {
+  server.use(apiPost('/auth/login', () => HttpResponse.json(secondFactorRequired(CHALLENGE_ID))));
+  const result = await useAuthStore.getState().login({ email: 'asha@example.com', password: 'pw' });
+  expect(result).toEqual({ ok: true, next: 'secondFactor' });
+}
+
 describe('auth store session state', () => {
   it('starts with no session', () => {
+    expect(useAuthStore.getState().status).toBe('signedOut');
     expect(useAuthStore.getState().accessToken).toBeNull();
     expect(useAuthStore.getState().user).toBeNull();
-    expect(useAuthStore.getState().confirmedCredentials).toBeNull();
+    expect(useAuthStore.getState().pendingSecondFactor).toBeNull();
     expect(useAuthStore.getState().pendingVerification).toBeNull();
   });
 
   it('holds the session and clears it completely', () => {
-    useAuthStore.getState().setSession('token-1', USER);
-    useAuthStore.setState({ confirmedCredentials: { userId: USER_ID, verificationTier: 'EMAIL' } });
+    useAuthStore.getState().setSession({ accessToken: 'token-1', user: USER, authMethods: ['pwd', 'otp'] });
+    expect(useAuthStore.getState().status).toBe('signedIn');
     expect(useAuthStore.getState().accessToken).toBe('token-1');
     expect(useAuthStore.getState().user).toEqual(USER);
+    expect(useAuthStore.getState().authMethods).toEqual(['pwd', 'otp']);
 
-    useAuthStore.getState().setAccessToken('token-2');
-    expect(useAuthStore.getState().accessToken).toBe('token-2');
-    expect(useAuthStore.getState().user).toEqual(USER);
-
-    useAuthStore.getState().clearSession();
+    useAuthStore.getState().clearSession('revokedAll');
+    expect(useAuthStore.getState().status).toBe('signedOut');
     expect(useAuthStore.getState().accessToken).toBeNull();
     expect(useAuthStore.getState().user).toBeNull();
-    expect(useAuthStore.getState().confirmedCredentials).toBeNull();
+    expect(useAuthStore.getState().authMethods).toEqual([]);
+    expect(useAuthStore.getState().signOutReason).toBe('revokedAll');
   });
 
-  it('never writes the token or the verificationId to browser storage', async () => {
-    server.use(apiPost('/auth/register', () => challenge(FIRST_ID)));
-    useAuthStore.getState().setSession('secret-token', USER);
-    await useAuthStore.getState().register(REGISTRATION);
+  it('never writes the token, the challengeId or the verificationId to browser storage', async () => {
+    const token = fakeAccessToken(['pwd', 'otp'], 'secret-token');
+    server.use(
+      apiPost('/auth/register', () => challenge(FIRST_ID)),
+      apiPost('/auth/login/second-factor', () =>
+        HttpResponse.json(authenticated(USER_ID, 'EMAIL', { amr: ['pwd', 'otp'], tokenId: 'secret-token' })),
+      ),
+    );
 
-    expect(localStorage).toHaveLength(0);
-    expect(sessionStorage).toHaveLength(0);
-    expect(document.cookie).not.toContain('secret-token');
-    expect(document.cookie).not.toContain(FIRST_ID);
-    expect(window.location.href).not.toContain(FIRST_ID);
+    await useAuthStore.getState().register(REGISTRATION);
+    await startSecondFactor();
+    expectNothingInBrowserStorage(FIRST_ID, CHALLENGE_ID);
+    await useAuthStore.getState().completeSecondFactor('123456');
+
+    expect(useAuthStore.getState().accessToken).toBe(token);
+    expectNothingInBrowserStorage(FIRST_ID, CHALLENGE_ID, token);
+  });
+});
+
+describe('restoreSession', () => {
+  it('restores a reloaded session with one refresh call', async () => {
+    server.use(
+      apiPost(REFRESH_PATH, ({ request }) => {
+        refreshCalls.push(request);
+        return HttpResponse.json(accessGrant(USER_ID, 'EMAIL', { amr: ['pwd', 'otp'] }));
+      }),
+    );
+    useAuthStore.setState({ status: 'starting' });
+
+    await useAuthStore.getState().restoreSession();
+
+    expect(refreshCalls).toHaveLength(1);
+    expect(refreshCalls[0]?.headers.get('X-TripMates-CSRF')).toBe('1');
+    expect(useAuthStore.getState().status).toBe('signedIn');
+    expect(useAuthStore.getState().user).toEqual({ id: USER_ID, role: 'USER', verificationTier: 'EMAIL' });
+    expect(useAuthStore.getState().authMethods).toEqual(['pwd', 'otp']);
+  });
+
+  it('settles on signed out, with no notice, when there is no session to restore', async () => {
+    useAuthStore.setState({ status: 'starting' });
+
+    await useAuthStore.getState().restoreSession();
+
+    expect(refreshCalls).toHaveLength(1);
+    expect(useAuthStore.getState().status).toBe('signedOut');
+    expect(useAuthStore.getState().signOutReason).toBeNull();
+  });
+
+  it('waits instead of signing out when the server cannot answer', async () => {
+    server.use(
+      apiPost(REFRESH_PATH, () =>
+        problem(503, 'temporarily_unavailable', 'TripMates is busy.', { headers: { 'Retry-After': '20' } }),
+      ),
+    );
+    useAuthStore.setState({ status: 'starting' });
+
+    await useAuthStore.getState().restoreSession();
+
+    expect(useAuthStore.getState().status).toBe('unavailable');
+    expect(useAuthStore.getState().startupRetryAfterSeconds).toBe(20);
   });
 });
 
@@ -238,27 +315,23 @@ describe('verifyEmail and resend', () => {
 });
 
 describe('login', () => {
-  it('records the confirmed credentials and creates no session', async () => {
+  it('opens the session login returned, with the amr read from the token', async () => {
     server.use(apiPost('/auth/login', () => HttpResponse.json(authenticated(USER_ID, 'EMAIL'))));
 
     const result = await useAuthStore.getState().login({ email: 'asha@example.com', password: 'pw' });
 
-    expect(result).toEqual({ ok: true });
-    expect(useAuthStore.getState().confirmedCredentials).toEqual({ userId: USER_ID, verificationTier: 'EMAIL' });
-    expect(useAuthStore.getState().accessToken).toBeNull();
-    expect(useAuthStore.getState().user).toBeNull();
+    expect(result).toEqual({ ok: true, next: 'signedIn' });
+    expect(useAuthStore.getState().status).toBe('signedIn');
+    expect(useAuthStore.getState().accessToken).toBe(fakeAccessToken(['pwd']));
+    expect(useAuthStore.getState().user).toEqual({ id: USER_ID, role: 'USER', verificationTier: 'EMAIL' });
+    expect(useAuthStore.getState().authMethods).toEqual(['pwd']);
   });
 
   it('answers a 401 with the server message and never calls the refresh endpoint', async () => {
     const detail =
       'The email or password is incorrect, or the email address has not been verified yet. ' +
       'If you just signed up, use the code we emailed you first.';
-    server.use(
-      apiPost('/auth/login', () =>
-        HttpResponse.json({ status: 401, code: 'invalid_credentials', detail }, { status: 401 }),
-      ),
-    );
-    useAuthStore.setState({ confirmedCredentials: { userId: USER_ID, verificationTier: 'EMAIL' } });
+    server.use(apiPost('/auth/login', () => problem(401, 'invalid_credentials', detail)));
 
     const result = await useAuthStore.getState().login({ email: 'asha@example.com', password: 'wrong' });
 
@@ -267,37 +340,57 @@ describe('login', () => {
       expect(result.failure.message).toBe(detail);
     }
     expect(refreshCalls).toHaveLength(0);
-    expect(useAuthStore.getState().confirmedCredentials).toBeNull();
+    expect(useAuthStore.getState().status).toBe('signedOut');
   });
 
-  it('rejects a login response with an unknown tier', async () => {
+  it('rejects a login response with an unknown tier or role', async () => {
     server.use(apiPost('/auth/login', () => HttpResponse.json(authenticated(USER_ID, 'GOD_MODE'))));
+    expect((await useAuthStore.getState().login({ email: 'asha@example.com', password: 'pw' })).ok).toBe(false);
+
+    server.use(apiPost('/auth/login', () => HttpResponse.json(authenticated(USER_ID, 'EMAIL', { role: 'ROOT' }))));
+    expect((await useAuthStore.getState().login({ email: 'asha@example.com', password: 'pw' })).ok).toBe(false);
+
+    expect(useAuthStore.getState().status).toBe('signedOut');
+  });
+
+  it('rejects a status it does not know instead of treating it as a sign-in', async () => {
+    server.use(
+      apiPost('/auth/login', () => HttpResponse.json({ ...authenticated(USER_ID, 'EMAIL'), status: 'SOMETHING_NEW' })),
+    );
 
     const result = await useAuthStore.getState().login({ email: 'asha@example.com', password: 'pw' });
 
     expect(result.ok).toBe(false);
-    expect(useAuthStore.getState().confirmedCredentials).toBeNull();
+    expect(useAuthStore.getState().status).toBe('signedOut');
   });
 
-  it('does not treat a login status it does not know as a sign-in', async () => {
+  it('keeps only the challenge for a 2FA account: no token, no session', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-20T10:00:00Z') });
+    try {
+      await startSecondFactor();
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(useAuthStore.getState().pendingSecondFactor).toEqual({
+      challengeId: CHALLENGE_ID,
+      expiresAt: new Date('2026-11-20T10:05:00Z').getTime(),
+    });
+    expect(useAuthStore.getState().status).toBe('signedOut');
+    expect(useAuthStore.getState().accessToken).toBeNull();
+  });
+
+  it('rejects a challenge without an ID rather than storing undefined', async () => {
     server.use(
       apiPost('/auth/login', () =>
-        HttpResponse.json({ ...authenticated(USER_ID, 'EMAIL'), status: 'SECOND_FACTOR_REQUIRED' }),
+        HttpResponse.json({ status: 'SECOND_FACTOR_REQUIRED', session: null, secondFactor: { expiresIn: 300 } }),
       ),
     );
 
     const result = await useAuthStore.getState().login({ email: 'asha@example.com', password: 'pw' });
 
     expect(result.ok).toBe(false);
-    expect(useAuthStore.getState().confirmedCredentials).toBeNull();
-  });
-
-  it('rejects a response that has no status and session', async () => {
-    server.use(apiPost('/auth/login', () => HttpResponse.json({ userId: USER_ID, verificationTier: 'EMAIL' })));
-
-    const result = await useAuthStore.getState().login({ email: 'asha@example.com', password: 'pw' });
-
-    expect(result.ok).toBe(false);
+    expect(useAuthStore.getState().pendingSecondFactor).toBeNull();
   });
 
   describe('Retry-After on a 429', () => {
@@ -329,5 +422,105 @@ describe('login', () => {
         expect(result.failure.correlationId).toBe('corr-429');
       }
     });
+  });
+});
+
+describe('completeSecondFactor', () => {
+  it('sends the stored challenge with the code and opens the session with otp in amr', async () => {
+    const bodies: unknown[] = [];
+    server.use(
+      apiPost('/auth/login/second-factor', async ({ request }) => {
+        bodies.push(await request.json());
+        return HttpResponse.json(authenticated(USER_ID, 'EMAIL', { amr: ['pwd', 'otp'] }));
+      }),
+    );
+    await startSecondFactor();
+
+    const result = await useAuthStore.getState().completeSecondFactor('492039');
+
+    expect(result).toEqual({ ok: true });
+    expect(bodies).toEqual([{ challengeId: CHALLENGE_ID, code: '492039' }]);
+    expect(useAuthStore.getState().status).toBe('signedIn');
+    expect(useAuthStore.getState().authMethods).toEqual(['pwd', 'otp']);
+    expect(useAuthStore.getState().pendingSecondFactor).toBeNull();
+  });
+
+  it('keeps the challenge after a wrong code and never refreshes on its 401', async () => {
+    server.use(apiPost('/auth/login/second-factor', () => problem(401, 'invalid_second_factor', INVALID_SECOND_FACTOR)));
+    await startSecondFactor();
+
+    const result = await useAuthStore.getState().completeSecondFactor('000000');
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.failure.code).toBe('invalid_second_factor');
+      expect(result.failure.message).toBe(INVALID_SECOND_FACTOR);
+    }
+    expect(useAuthStore.getState().pendingSecondFactor?.challengeId).toBe(CHALLENGE_ID);
+    expect(refreshCalls).toHaveLength(0);
+    expect(useAuthStore.getState().status).toBe('signedOut');
+  });
+
+  it('refuses to send a code without a challenge in this tab', async () => {
+    const calls: Request[] = [];
+    server.use(
+      apiPost('/auth/login/second-factor', ({ request }) => {
+        calls.push(request);
+        return HttpResponse.json({});
+      }),
+    );
+
+    const result = await useAuthStore.getState().completeSecondFactor('123456');
+
+    expect(result.ok).toBe(false);
+    expect(calls).toHaveLength(0);
+  });
+});
+
+describe('logout and revoke-all', () => {
+  beforeEach(() => {
+    useAuthStore.getState().setSession({ accessToken: 'token-1', user: USER, authMethods: ['pwd'] });
+  });
+
+  it('logs out on the server with the bearer token, then clears the tab', async () => {
+    const seen: (string | null)[] = [];
+    server.use(
+      apiPost('/auth/logout', ({ request }) => {
+        seen.push(request.headers.get('Authorization'));
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+
+    await useAuthStore.getState().logout();
+
+    expect(seen).toEqual(['Bearer token-1']);
+    expect(useAuthStore.getState().status).toBe('signedOut');
+    expect(useAuthStore.getState().signOutReason).toBeNull();
+  });
+
+  it('still signs this tab out when the logout call fails', async () => {
+    server.use(apiPost('/auth/logout', () => problem(503, 'temporarily_unavailable', 'Busy.')));
+
+    await useAuthStore.getState().logout();
+
+    expect(useAuthStore.getState().accessToken).toBeNull();
+  });
+
+  it('signs this tab out after revoking every session, and says why', async () => {
+    server.use(apiPost('/auth/sessions/revoke-all', () => new HttpResponse(null, { status: 204 })));
+
+    expect(await useAuthStore.getState().revokeAllDevices()).toEqual({ ok: true });
+
+    expect(useAuthStore.getState().status).toBe('signedOut');
+    expect(useAuthStore.getState().signOutReason).toBe('revokedAll');
+  });
+
+  it('keeps the session when revoke-all fails, so the user can retry', async () => {
+    server.use(apiPost('/auth/sessions/revoke-all', () => problem(503, 'temporarily_unavailable', 'Busy.')));
+
+    const result = await useAuthStore.getState().revokeAllDevices();
+
+    expect(result.ok).toBe(false);
+    expect(useAuthStore.getState().accessToken).toBe('token-1');
   });
 });

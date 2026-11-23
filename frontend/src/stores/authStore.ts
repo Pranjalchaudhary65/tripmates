@@ -1,19 +1,19 @@
 import { create } from 'zustand';
+import type { AccessGrant, AuthMethod, SessionUser } from '../api/accessGrant';
+import type { SessionRefresher } from '../api/authRefresh';
 import { identityApi, type LoginBody, type RegistrationBody } from '../api/identityApi';
 import { toApiFailure, type ApiFailure } from '../api/problem';
 
-/** Mirrors users.id_verification_tier in DESIGN.md. */
-export type VerificationTier = 'NONE' | 'EMAIL' | 'PHONE' | 'SELFIE_MATCH';
+export type { AuthMethod, SessionUser, UserRole, VerificationTier } from '../api/accessGrant';
 
-/** Mirrors users.role in DESIGN.md. */
-export type UserRole = 'USER' | 'ADMIN';
-
-/** What route guards need to know about the signed-in user. */
-export interface SessionUser {
-  id: string;
-  role: UserRole;
-  verificationTier: VerificationTier;
-}
+/**
+ * - starting: the page just loaded and the one start-up refresh is in flight;
+ *   nothing may decide yet whether the user is signed in.
+ * - unavailable: that refresh got no answer about the session (server down,
+ *   network); the app waits and tries again instead of guessing.
+ * - signedIn / signedOut: known.
+ */
+export type AuthStatus = 'starting' | 'unavailable' | 'signedIn' | 'signedOut';
 
 /**
  * A sign-up waiting for its emailed code. The verificationId is half of what
@@ -31,65 +31,117 @@ export interface PendingVerification {
 }
 
 /**
- * The login endpoint accepted the email and password. The store does not
- * keep the session that login opens, so this is not a session: it grants
- * nothing on any other request, and route guards look at accessToken and
- * user, never at this.
+ * A login whose password was right and which waits for a TOTP or backup
+ * code. The challengeId finishes the login for whoever holds it, so it is
+ * kept like the verificationId: in memory only. A reload drops it, and the
+ * user enters the password again.
  */
-export interface ConfirmedCredentials {
-  userId: string;
-  verificationTier: VerificationTier;
+export interface PendingSecondFactor {
+  challengeId: string;
+  /** Epoch ms, from the server's expiresIn; drives the countdown. */
+  expiresAt: number;
 }
+
+/** Why the user was last signed out without asking, for the login screen to explain. */
+export type SignOutReason = 'expired' | 'revokedAll';
 
 export type ActionResult = { ok: true } | { ok: false; failure: ApiFailure };
 
+export type LoginResult = { ok: true; next: 'signedIn' | 'secondFactor' } | { ok: false; failure: ApiFailure };
+
 export interface AuthState {
+  status: AuthStatus;
   accessToken: string | null;
   user: SessionUser | null;
-  confirmedCredentials: ConfirmedCredentials | null;
+  authMethods: readonly AuthMethod[];
+  /** Seconds to wait before retrying the start-up refresh, when the server said. */
+  startupRetryAfterSeconds: number | null;
+  signOutReason: SignOutReason | null;
   pendingVerification: PendingVerification | null;
-  setAccessToken: (accessToken: string) => void;
-  setSession: (accessToken: string, user: SessionUser) => void;
-  clearSession: () => void;
+  pendingSecondFactor: PendingSecondFactor | null;
+  setSession: (grant: AccessGrant) => void;
+  clearSession: (reason?: SignOutReason) => void;
+  restoreSession: () => Promise<void>;
   register: (body: RegistrationBody) => Promise<ActionResult>;
   verifyEmail: (code: string) => Promise<ActionResult>;
   resendVerification: () => Promise<ActionResult>;
-  login: (body: LoginBody) => Promise<ActionResult>;
+  login: (body: LoginBody) => Promise<LoginResult>;
+  completeSecondFactor: (code: string) => Promise<ActionResult>;
+  abandonSecondFactor: () => void;
+  logout: () => Promise<void>;
+  revokeAllDevices: () => Promise<ActionResult>;
 }
 
-const NO_PENDING_VERIFICATION: ApiFailure = {
-  kind: 'unexpected',
-  status: null,
-  code: null,
-  message: 'There is no sign-up waiting for a code in this tab. Sign up again to get a new code.',
-  fieldErrors: {},
-  formErrors: [],
-  correlationId: null,
-  retryAfterSeconds: null,
-};
+const NO_PENDING_VERIFICATION: ApiFailure = localFailure(
+  'There is no sign-up waiting for a code in this tab. Sign up again to get a new code.',
+);
+
+const NO_PENDING_SECOND_FACTOR: ApiFailure = localFailure(
+  'There is no sign-in waiting for a code in this tab. Enter your email and password again.',
+);
+
+let sessionRefresher: SessionRefresher | null = null;
+
+/** main.tsx hands over the refresher the interceptors use, so start-up shares their single flight. */
+export function provideSessionRefresher(refresher: SessionRefresher): void {
+  sessionRefresher = refresher;
+}
 
 /**
  * Auth state lives in this JavaScript closure only. There is deliberately no
  * persist middleware: localStorage and sessionStorage are readable by any
  * script on the page, so a single XSS bug would hand over a reusable token.
- *
- * A page reload therefore starts empty, and nothing is requested on load:
- * the session is not restored from the httpOnly refresh cookie at start-up.
+ * A reload restores the session from the httpOnly refresh cookie instead,
+ * with one refresh call (restoreSession).
  */
 export const useAuthStore = create<AuthState>()((set, get) => ({
+  status: 'starting',
   accessToken: null,
   user: null,
-  confirmedCredentials: null,
+  authMethods: [],
+  startupRetryAfterSeconds: null,
+  signOutReason: null,
   pendingVerification: null,
+  pendingSecondFactor: null,
 
-  setAccessToken: (accessToken) => {
-    set({ accessToken });
+  setSession: (grant) => {
+    set({
+      status: 'signedIn',
+      accessToken: grant.accessToken,
+      user: grant.user,
+      authMethods: grant.authMethods,
+      startupRetryAfterSeconds: null,
+      signOutReason: null,
+      pendingSecondFactor: null,
+    });
   },
-  setSession: (accessToken, user) => {
-    set({ accessToken, user });
+
+  clearSession: (reason) => {
+    set({
+      status: 'signedOut',
+      accessToken: null,
+      user: null,
+      authMethods: [],
+      startupRetryAfterSeconds: null,
+      signOutReason: reason ?? null,
+      pendingSecondFactor: null,
+    });
   },
-  clearSession: () => {
-    set({ accessToken: null, user: null, confirmedCredentials: null });
+
+  /**
+   * The one call a page load makes to find out who is signed in. Until it
+   * answers, status stays 'starting' and the app shows a loading screen, so
+   * neither a logged-out page nor a redirect to login appears first.
+   */
+  restoreSession: async () => {
+    if (sessionRefresher === null) {
+      throw new Error('provideSessionRefresher must be called before restoreSession.');
+    }
+    set({ status: 'starting', startupRetryAfterSeconds: null });
+    const outcome = await sessionRefresher.refresh();
+    if (outcome.kind === 'unavailable') {
+      set({ status: 'unavailable', startupRetryAfterSeconds: toApiFailure(outcome.error).retryAfterSeconds });
+    }
   },
 
   register: async (body) => {
@@ -151,13 +203,84 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   },
 
   login: async (body) => {
-    set({ confirmedCredentials: null });
+    set({ pendingSecondFactor: null });
     try {
-      const result = await identityApi.login(body);
-      set({ confirmedCredentials: { userId: result.userId, verificationTier: result.verificationTier } });
+      const outcome = await identityApi.login(body);
+      if (outcome.kind === 'secondFactor') {
+        set({
+          pendingSecondFactor: {
+            challengeId: outcome.challengeId,
+            expiresAt: Date.now() + outcome.expiresInSeconds * 1000,
+          },
+        });
+        return { ok: true, next: 'secondFactor' };
+      }
+      get().setSession(outcome.grant);
+      return { ok: true, next: 'signedIn' };
+    } catch (error) {
+      return { ok: false, failure: toApiFailure(error) };
+    }
+  },
+
+  /**
+   * The challenge stays in the store after any failure: after a wrong code
+   * the user may try again within the server's limit, and after an expired
+   * one the screen explains it and the user leaves through abandonSecondFactor.
+   */
+  completeSecondFactor: async (code) => {
+    const pending = get().pendingSecondFactor;
+    if (pending === null) {
+      return { ok: false, failure: NO_PENDING_SECOND_FACTOR };
+    }
+    try {
+      const grant = await identityApi.completeSecondFactor(pending.challengeId, code);
+      get().setSession(grant);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, failure: toApiFailure(error) };
+    }
+  },
+
+  abandonSecondFactor: () => {
+    set({ pendingSecondFactor: null });
+  },
+
+  /**
+   * The tab signs out whatever the server answers: the user asked to leave,
+   * and keeping the token after a failed call would be the surprising
+   * outcome. The server-side session still ends when the call succeeds,
+   * which it does whenever the server is reachable.
+   */
+  logout: async () => {
+    try {
+      await identityApi.logout();
+    } catch {
+      // Signed out locally regardless; see above.
+    }
+    get().clearSession();
+  },
+
+  /** Ends every session, this tab's included, so this tab signs out too. */
+  revokeAllDevices: async () => {
+    try {
+      await identityApi.revokeAllDevices();
+      get().clearSession('revokedAll');
       return { ok: true };
     } catch (error) {
       return { ok: false, failure: toApiFailure(error) };
     }
   },
 }));
+
+function localFailure(message: string): ApiFailure {
+  return {
+    kind: 'unexpected',
+    status: null,
+    code: null,
+    message,
+    fieldErrors: {},
+    formErrors: [],
+    correlationId: null,
+    retryAfterSeconds: null,
+  };
+}

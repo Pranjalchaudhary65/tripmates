@@ -3,7 +3,7 @@ import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAuthStore } from '../stores/authStore';
-import { installAuthInterceptors, REFRESH_PATH } from './authRefresh';
+import { CSRF_HEADER, installAuthInterceptors, REFRESH_PATH, type SessionRefresher } from './authRefresh';
 import { createApiClient } from './createApiClient';
 
 const BASE_URL = 'http://api.test/api/v1';
@@ -12,12 +12,16 @@ const REFRESH_URL = `${BASE_URL}${REFRESH_PATH}`;
 
 const OLD_TOKEN = 'old-access-token';
 const NEW_TOKEN = 'new-access-token';
+const USER = { id: 'u-1', role: 'USER', verificationTier: 'EMAIL' } as const;
 
 const unauthorized = () =>
   HttpResponse.json(
     { status: 401, title: 'Unauthorized', detail: 'Authentication is required to access this resource.' },
     { status: 401, headers: { 'Content-Type': 'application/problem+json' } },
   );
+
+/** AccessGrantResponse from the refresh endpoint. */
+const grant = (accessToken: string) => HttpResponse.json({ accessToken, tokenType: 'Bearer', expiresIn: 900, user: USER });
 
 /** Trips endpoint that accepts only NEW_TOKEN and records every Authorization it saw. */
 function tripsAcceptingNewToken(seen: (string | null)[]) {
@@ -36,9 +40,14 @@ function refreshEndpoint(calls: Request[], respond: () => Response | Promise<Res
   });
 }
 
+function signedInWith(accessToken: string) {
+  useAuthStore.getState().setSession({ accessToken, user: USER, authMethods: ['pwd'] });
+}
+
 const server = setupServer();
 
 let api: AxiosInstance;
+let refresher: SessionRefresher;
 let onSessionExpired: ReturnType<typeof vi.fn<() => void>>;
 
 beforeAll(() => {
@@ -49,7 +58,7 @@ beforeEach(() => {
   useAuthStore.getState().clearSession();
   api = createApiClient(BASE_URL);
   onSessionExpired = vi.fn<() => void>();
-  installAuthInterceptors(api, { onSessionExpired });
+  refresher = installAuthInterceptors(api, { onSessionExpired });
 });
 
 afterEach(() => {
@@ -81,7 +90,7 @@ describe('API client', () => {
   it('attaches the in-memory access token as a bearer header', async () => {
     const seen: (string | null)[] = [];
     server.use(tripsAcceptingNewToken(seen));
-    useAuthStore.getState().setAccessToken(NEW_TOKEN);
+    signedInWith(NEW_TOKEN);
 
     const response = await api.get('/trips');
 
@@ -108,11 +117,8 @@ describe('silent refresh', () => {
   it('refreshes once on a 401 and retries the original request once with the new token', async () => {
     const seen: (string | null)[] = [];
     const refreshCalls: Request[] = [];
-    server.use(
-      tripsAcceptingNewToken(seen),
-      refreshEndpoint(refreshCalls, () => HttpResponse.json({ accessToken: NEW_TOKEN })),
-    );
-    useAuthStore.getState().setAccessToken(OLD_TOKEN);
+    server.use(tripsAcceptingNewToken(seen), refreshEndpoint(refreshCalls, () => grant(NEW_TOKEN)));
+    signedInWith(OLD_TOKEN);
 
     const response = await api.get('/trips');
 
@@ -121,16 +127,42 @@ describe('silent refresh', () => {
     expect(refreshCalls[0]?.headers.get('Authorization')).toBeNull();
     expect(seen).toEqual([`Bearer ${OLD_TOKEN}`, `Bearer ${NEW_TOKEN}`]);
     expect(useAuthStore.getState().accessToken).toBe(NEW_TOKEN);
+    expect(useAuthStore.getState().user).toEqual(USER);
     expect(onSessionExpired).not.toHaveBeenCalled();
   });
 
-  it('refreshes on a 401 even when the app has no token yet, as after a page reload', async () => {
+  it('sends the CSRF header the backend requires on every refresh', async () => {
+    const refreshCalls: Request[] = [];
+    server.use(tripsAcceptingNewToken([]), refreshEndpoint(refreshCalls, () => grant(NEW_TOKEN)));
+    signedInWith(OLD_TOKEN);
+
+    await api.get('/trips');
+    await refresher.refresh();
+
+    expect(refreshCalls).toHaveLength(2);
+    for (const call of refreshCalls) {
+      expect(call.headers.get(CSRF_HEADER)).toBe('1');
+    }
+  });
+
+  it('does not send the CSRF header on other requests', async () => {
+    const seen: (string | null)[] = [];
+    server.use(
+      http.get(TRIPS_URL, ({ request }) => {
+        seen.push(request.headers.get(CSRF_HEADER));
+        return HttpResponse.json({ items: [] });
+      }),
+    );
+
+    await api.get('/trips');
+
+    expect(seen).toEqual([null]);
+  });
+
+  it('refreshes on a 401 even when the app has no token yet', async () => {
     const seen: (string | null)[] = [];
     const refreshCalls: Request[] = [];
-    server.use(
-      tripsAcceptingNewToken(seen),
-      refreshEndpoint(refreshCalls, () => HttpResponse.json({ accessToken: NEW_TOKEN })),
-    );
+    server.use(tripsAcceptingNewToken(seen), refreshEndpoint(refreshCalls, () => grant(NEW_TOKEN)));
 
     const response = await api.get('/trips');
 
@@ -147,9 +179,9 @@ describe('silent refresh', () => {
         seen.push(request.headers.get('Authorization'));
         return unauthorized();
       }),
-      refreshEndpoint(refreshCalls, () => HttpResponse.json({ accessToken: NEW_TOKEN })),
+      refreshEndpoint(refreshCalls, () => grant(NEW_TOKEN)),
     );
-    useAuthStore.getState().setAccessToken(OLD_TOKEN);
+    signedInWith(OLD_TOKEN);
 
     const error = await rejectionOf(api.get('/trips'));
 
@@ -169,10 +201,10 @@ describe('silent refresh', () => {
       tripsAcceptingNewToken(seen),
       refreshEndpoint(refreshCalls, async () => {
         await refreshGate;
-        return HttpResponse.json({ accessToken: NEW_TOKEN });
+        return grant(NEW_TOKEN);
       }),
     );
-    useAuthStore.getState().setAccessToken(OLD_TOKEN);
+    signedInWith(OLD_TOKEN);
 
     const requests = Promise.all([api.get('/trips'), api.get('/trips'), api.get('/trips')]);
     await vi.waitFor(() => {
@@ -187,6 +219,32 @@ describe('silent refresh', () => {
     expect(seen.filter((value) => value === `Bearer ${NEW_TOKEN}`)).toHaveLength(3);
   });
 
+  it('shares one call between the start-up refresh and a 401 that arrives while it is in flight', async () => {
+    const refreshCalls: Request[] = [];
+    let releaseRefresh: () => void = () => undefined;
+    const refreshGate = new Promise<void>((resolve) => {
+      releaseRefresh = resolve;
+    });
+    server.use(
+      tripsAcceptingNewToken([]),
+      refreshEndpoint(refreshCalls, async () => {
+        await refreshGate;
+        return grant(NEW_TOKEN);
+      }),
+    );
+
+    const startup = refresher.refresh();
+    const request = api.get('/trips');
+    await vi.waitFor(() => {
+      expect(refreshCalls).toHaveLength(1);
+    });
+    releaseRefresh();
+
+    expect(await startup).toEqual({ kind: 'refreshed', accessToken: NEW_TOKEN });
+    expect((await request).status).toBe(200);
+    expect(refreshCalls).toHaveLength(1);
+  });
+
   it('retries without refreshing when another refresh already replaced the token', async () => {
     const seen: (string | null)[] = [];
     const refreshCalls: Request[] = [];
@@ -197,12 +255,12 @@ describe('silent refresh', () => {
         if (authorization === `Bearer ${NEW_TOKEN}`) {
           return HttpResponse.json({ items: [] });
         }
-        useAuthStore.getState().setAccessToken(NEW_TOKEN);
+        signedInWith(NEW_TOKEN);
         return unauthorized();
       }),
-      refreshEndpoint(refreshCalls, () => HttpResponse.json({ accessToken: 'unused' })),
+      refreshEndpoint(refreshCalls, () => grant('unused')),
     );
-    useAuthStore.getState().setAccessToken(OLD_TOKEN);
+    signedInWith(OLD_TOKEN);
 
     const response = await api.get('/trips');
 
@@ -215,9 +273,9 @@ describe('silent refresh', () => {
     const refreshCalls: Request[] = [];
     server.use(
       http.get(TRIPS_URL, () => HttpResponse.json({ status: 403 }, { status: 403 })),
-      refreshEndpoint(refreshCalls, () => HttpResponse.json({ accessToken: NEW_TOKEN })),
+      refreshEndpoint(refreshCalls, () => grant(NEW_TOKEN)),
     );
-    useAuthStore.getState().setAccessToken(OLD_TOKEN);
+    signedInWith(OLD_TOKEN);
 
     const error = await rejectionOf(api.get('/trips'));
 
@@ -225,27 +283,30 @@ describe('silent refresh', () => {
     expect(refreshCalls).toHaveLength(0);
   });
 
-  it('does not refresh when a request opts out with skipAuthRefresh', async () => {
-    const refreshCalls: Request[] = [];
-    server.use(
-      http.post(`${BASE_URL}/auth/login`, unauthorized),
-      refreshEndpoint(refreshCalls, () => HttpResponse.json({ accessToken: NEW_TOKEN })),
-    );
+  it.each(['/auth/login', '/auth/login/second-factor'])(
+    'does not refresh on a 401 from %s, which opts out with skipAuthRefresh',
+    async (path) => {
+      const refreshCalls: Request[] = [];
+      server.use(
+        http.post(`${BASE_URL}${path}`, unauthorized),
+        refreshEndpoint(refreshCalls, () => grant(NEW_TOKEN)),
+      );
 
-    const error = await rejectionOf(api.post('/auth/login', {}, { skipAuthRefresh: true }));
+      const error = await rejectionOf(api.post(path, {}, { skipAuthRefresh: true }));
 
-    expect(error.response?.status).toBe(401);
-    expect(refreshCalls).toHaveLength(0);
-    expect(onSessionExpired).not.toHaveBeenCalled();
-  });
+      expect(error.response?.status).toBe(401);
+      expect(refreshCalls).toHaveLength(0);
+      expect(onSessionExpired).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('failed refresh', () => {
-  it('never refreshes again on a 401 from the refresh call, then clears the session and redirects once', async () => {
+  it('never refreshes again on a 401 from the refresh call, then clears the session and reports it once', async () => {
     const seen: (string | null)[] = [];
     const refreshCalls: Request[] = [];
     server.use(tripsAcceptingNewToken(seen), refreshEndpoint(refreshCalls, unauthorized));
-    useAuthStore.getState().setSession(OLD_TOKEN, { id: 'u-1', role: 'USER', verificationTier: 'EMAIL' });
+    signedInWith(OLD_TOKEN);
 
     const errors = await Promise.all([
       rejectionOf(api.get('/trips')),
@@ -259,6 +320,7 @@ describe('failed refresh', () => {
     expect(seen).toHaveLength(3);
     expect(useAuthStore.getState().accessToken).toBeNull();
     expect(useAuthStore.getState().user).toBeNull();
+    expect(useAuthStore.getState().status).toBe('signedOut');
     expect(onSessionExpired).toHaveBeenCalledTimes(1);
   });
 
@@ -276,7 +338,7 @@ describe('failed refresh', () => {
       }),
       refreshEndpoint(refreshCalls, unauthorized),
     );
-    useAuthStore.getState().setAccessToken(OLD_TOKEN);
+    signedInWith(OLD_TOKEN);
 
     const slow = rejectionOf(api.get('/slow'));
     await rejectionOf(api.get('/trips'));
@@ -294,7 +356,7 @@ describe('failed refresh', () => {
       http.get(TRIPS_URL, unauthorized),
       refreshEndpoint(refreshCalls, () => HttpResponse.json({ token: NEW_TOKEN })),
     );
-    useAuthStore.getState().setAccessToken(OLD_TOKEN);
+    signedInWith(OLD_TOKEN);
 
     const error = await rejectionOf(api.get('/trips'));
 
@@ -304,17 +366,85 @@ describe('failed refresh', () => {
     expect(onSessionExpired).toHaveBeenCalledTimes(1);
   });
 
-  it('treats a server error from the refresh endpoint as a failure', async () => {
+  it('reports nothing when the start-up refresh finds no session, since none ended', async () => {
+    server.use(http.post(REFRESH_URL, unauthorized));
+    useAuthStore.setState({ status: 'starting' });
+
+    expect(await refresher.refresh()).toEqual({ kind: 'expired' });
+
+    expect(useAuthStore.getState().status).toBe('signedOut');
+    expect(useAuthStore.getState().signOutReason).toBeNull();
+    expect(onSessionExpired).not.toHaveBeenCalled();
+  });
+
+  it('ends the session on a 403 from refresh, which no retry can fix', async () => {
     server.use(
       http.get(TRIPS_URL, unauthorized),
-      http.post(REFRESH_URL, () => HttpResponse.json({ status: 503 }, { status: 503 })),
+      http.post(REFRESH_URL, () => HttpResponse.json({ status: 403, code: 'csrf_rejected' }, { status: 403 })),
     );
-    useAuthStore.getState().setAccessToken(OLD_TOKEN);
+    signedInWith(OLD_TOKEN);
+
+    await rejectionOf(api.get('/trips'));
+
+    expect(useAuthStore.getState().status).toBe('signedOut');
+    expect(onSessionExpired).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('refresh unavailable', () => {
+  it('keeps the session on a 503 from refresh and hands the 503 to the caller', async () => {
+    server.use(
+      http.get(TRIPS_URL, unauthorized),
+      http.post(REFRESH_URL, () =>
+        HttpResponse.json(
+          { status: 503, code: 'temporarily_unavailable' },
+          { status: 503, headers: { 'Retry-After': '30' } },
+        ),
+      ),
+    );
+    signedInWith(OLD_TOKEN);
 
     const error = await rejectionOf(api.get('/trips'));
 
-    expect(error.response?.status).toBe(401);
-    expect(useAuthStore.getState().accessToken).toBeNull();
-    expect(onSessionExpired).toHaveBeenCalledTimes(1);
+    expect(error.response?.status).toBe(503);
+    expect(error.response?.headers['retry-after']).toBe('30');
+    expect(useAuthStore.getState().status).toBe('signedIn');
+    expect(useAuthStore.getState().accessToken).toBe(OLD_TOKEN);
+    expect(useAuthStore.getState().user).toEqual(USER);
+    expect(onSessionExpired).not.toHaveBeenCalled();
+  });
+
+  it('keeps the session when the refresh request cannot reach the server', async () => {
+    server.use(
+      http.get(TRIPS_URL, unauthorized),
+      http.post(REFRESH_URL, () => HttpResponse.error()),
+    );
+    signedInWith(OLD_TOKEN);
+
+    const error = await rejectionOf(api.get('/trips'));
+
+    expect(error.response).toBeUndefined();
+    expect(useAuthStore.getState().accessToken).toBe(OLD_TOKEN);
+    expect(onSessionExpired).not.toHaveBeenCalled();
+  });
+
+  it('tries the refresh again on the next 401 once the server is back', async () => {
+    const refreshCalls: Request[] = [];
+    let available = false;
+    server.use(
+      tripsAcceptingNewToken([]),
+      refreshEndpoint(refreshCalls, () =>
+        available ? grant(NEW_TOKEN) : HttpResponse.json({ status: 503 }, { status: 503 }),
+      ),
+    );
+    signedInWith(OLD_TOKEN);
+
+    expect((await rejectionOf(api.get('/trips'))).response?.status).toBe(503);
+    available = true;
+    const response = await api.get('/trips');
+
+    expect(response.status).toBe(200);
+    expect(refreshCalls).toHaveLength(2);
+    expect(useAuthStore.getState().accessToken).toBe(NEW_TOKEN);
   });
 });

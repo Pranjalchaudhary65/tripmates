@@ -9,7 +9,7 @@ const TIER_LABELS: Record<VerificationTier, string> = {
 };
 
 export function HomePage() {
-  const confirmed = useAuthStore((state) => state.confirmedCredentials);
+  const user = useAuthStore((state) => state.user);
 
   return (
     <section>
@@ -18,7 +18,7 @@ export function HomePage() {
         Verified people, commitments that count, and a safety net for the whole trip.
       </p>
 
-      {confirmed === null ? (
+      {user === null ? (
         <div className="mt-6 flex gap-4">
           <Link to="/signup" className="rounded-md bg-teal-700 px-4 py-2 font-semibold text-white hover:bg-teal-800">
             Create an account
@@ -29,8 +29,17 @@ export function HomePage() {
         </div>
       ) : (
         <div role="status" className="mt-6 max-w-prose rounded-md border border-teal-200 bg-teal-50 px-4 py-3">
-          <p className="font-medium text-teal-900">Your email and password were accepted.</p>
-          <p className="mt-1 text-sm text-teal-900">Verification level: {TIER_LABELS[confirmed.verificationTier]}</p>
+          <p className="font-medium text-teal-900">You are signed in.</p>
+          <p className="mt-1 text-sm text-teal-900">Verification level: {TIER_LABELS[user.verificationTier]}</p>
+          <p className="mt-2 text-sm">
+            <Link to="/account/security" className="font-medium text-teal-800 underline">
+              Two-factor authentication
+            </Link>
+            {' · '}
+            <Link to="/account/sessions" className="font-medium text-teal-800 underline">
+              Signed-in devices
+            </Link>
+          </p>
         </div>
       )}
     </section>

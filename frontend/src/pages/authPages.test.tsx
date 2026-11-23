@@ -22,7 +22,8 @@ beforeAll(() => {
   server.listen({ onUnhandledFrame: 'error' });
 });
 beforeEach(() => {
-  useAuthStore.setState({ accessToken: null, user: null, confirmedCredentials: null, pendingVerification: null });
+  useAuthStore.getState().clearSession();
+  useAuthStore.setState({ pendingVerification: null });
 });
 afterEach(() => {
   cleanup();
@@ -318,7 +319,7 @@ describe('login screen', () => {
     expect(screen.getByRole('alert').textContent).toContain('You can try again now.');
   });
 
-  it('confirms the credentials and goes home without creating a session', async () => {
+  it('signs in and goes home with the session in memory', async () => {
     server.use(
       apiPost('/auth/login', () =>
         HttpResponse.json(authenticated('0d4a3c1e-8f7b-4e2a-9c6d-5b4a3f2e1d0c', 'EMAIL')),
@@ -330,9 +331,10 @@ describe('login screen', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Log in' }));
 
-    expect(await screen.findByText('Your email and password were accepted.')).toBeDefined();
+    expect(await screen.findByText('You are signed in.')).toBeDefined();
     expect(screen.getByText('Verification level: Email verified')).toBeDefined();
     expect(router.state.location.pathname).toBe('/');
-    expect(useAuthStore.getState().accessToken).toBeNull();
+    expect(useAuthStore.getState().status).toBe('signedIn');
+    expect(screen.getByRole('button', { name: 'Log out' })).toBeDefined();
   });
 });
