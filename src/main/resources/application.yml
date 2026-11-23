@@ -94,6 +94,13 @@ tripmate:
   mail:
     from: ${MAIL_FROM:TripMates <no-reply@tripmate.local>}
 
+  vibe:
+    # Quiz draft saves, submissions, profile edits and deal-breakers together,
+    # per account. A draft is saved after every quiz step.
+    write-limit:
+      capacity: 120
+      period: 1h
+
   storage:
     # Where uploaded images are kept. Relative paths resolve against the
     # working directory; uploads/ is git-ignored and never served statically.
