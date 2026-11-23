@@ -122,3 +122,13 @@ One line per commit: what I built, and the key decision behind it.
   checks per attempt would be a free CPU attack. Chose 404 over 403 for a
   non-owner, so an ID never confirms it exists, and made the matrix read
   routes from Spring MVC so an uncovered endpoint fails the build.
+- **Step 3b** — Built the 2FA challenge screen, the security and sessions
+  screens, route guards and a single-flight silent refresh with the access
+  token in memory only. Chose a "starting" state that shows only a loading
+  screen until the one start-up refresh answers over letting guards run on
+  an empty store, so a reload never flashes the logged-out UI or bounces a
+  signed-in user to /login. Chose three refresh outcomes over two: only a
+  401/403 from refresh ends the session, while a 503, 429 or network error
+  keeps it, so an outage never logs everyone out. Kept the second-factor
+  challenge ID in memory only and accepted that a reload loses it, and
+  followed return paths only when they start with a single "/".

@@ -58,10 +58,10 @@ Deadline: 2026-11-30.
 - [x] Authorization test suite pattern established (owner/non-owner/anon) — applied retroactively to Steps 2a-3a endpoints
 
 ## Step 3b — Auth frontend: 2FA + session management
-- [ ] 2FA challenge screen (TOTP + backup code), access token kept in memory only
-- [ ] Axios interceptor: silent refresh + retry on 401
-- [ ] Session/device management screen (list + revoke-all-devices)
-- [ ] Route guards by auth state
+- [x] 2FA challenge screen (TOTP + backup code), access token kept in memory only
+- [x] Axios interceptor: silent refresh + retry on 401
+- [x] Session/device management screen (list + revoke-all-devices)
+- [x] Route guards by auth state
 
 ## Step 3c — Slim deploy (backend + frontend + managed Postgres, auth only)
 - [ ] Backend and frontend Dockerfiles; docker-compose.yml backend and frontend services built from them
