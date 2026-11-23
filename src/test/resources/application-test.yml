@@ -41,11 +41,34 @@ tripmate:
     encryption:
       # Test-only key, never used outside the test profile.
       kek: dGVzdC1vbmx5LWRhdGEtZW5jcnlwdGlvbi1rZWstMzI=
+    phone:
+      # Test-only key, never used outside the test profile.
+      blind-index-key: dGVzdC1vbmx5LXBob25lLWJsaW5kLWluZGV4LWtleS0zMmI=
+      sms-provider: mailbox
+    verification-limits:
+      # Above the 5-a-day code cap, so a test can reach that cap; the hourly
+      # bucket itself is the same RateLimiter every other route is tested with.
+      phone-code:
+        capacity: 20
+        period: 1h
+    selfie:
+      liveness-provider: mock
+      # Tests run the purge themselves, against the shared test clock; a
+      # background run could purge rows another test is still looking at.
+      purge-initial-delay: 1000d
+      purge-interval: 1000d
     access-token:
       # Test-only keys, never used outside the test profile. A previous key
       # is set so the rotation path is exercised by every test run.
       signing-key: dGVzdC1vbmx5LWp3dC1zaWduaW5nLWtleS1jdXJyZW50
       previous-signing-key: dGVzdC1vbmx5LWp3dC1zaWduaW5nLWtleS1wcmV2aW91cw==
+
+  storage:
+    # Under target/, so a test run never writes into the real uploads/.
+    local-root: target/test-uploads
+  media:
+    # Test-only key, never used outside the test profile.
+    signing-key: dGVzdC1vbmx5LW1lZGlhLXVybC1zaWduaW5nLWtleS0zMmJ5dGVz
 
 management:
   endpoint:

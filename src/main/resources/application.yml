@@ -36,6 +36,14 @@ spring:
       mail.smtp.timeout: 5000
       mail.smtp.writetimeout: 5000
 
+  servlet:
+    multipart:
+      # Uploads are photos: one frame is at most 5 MB, and the largest request
+      # (a selfie check) carries two. Tomcat refuses anything bigger while
+      # reading it, with 413, before it is held in memory or on disk whole.
+      max-file-size: 5MB
+      max-request-size: 11MB
+
   jpa:
     hibernate:
       ddl-auto: validate # never "update" - every schema change goes through Flyway
@@ -85,6 +93,17 @@ tripmate:
 
   mail:
     from: ${MAIL_FROM:TripMates <no-reply@tripmate.local>}
+
+  storage:
+    # Where uploaded images are kept. Relative paths resolve against the
+    # working directory; uploads/ is git-ignored and never served statically.
+    local-root: ${STORAGE_LOCAL_ROOT:uploads}
+
+  media:
+    # Base64, at least 32 random bytes: signs image links. No default.
+    # Rotating it only breaks links already handed out.
+    signing-key: ${MEDIA_URL_SIGNING_KEY}
+    url-ttl: 5m
 
   rate-limit:
     # Longest a single bucket call to Redis may take before the request is
@@ -144,6 +163,50 @@ tripmate:
       # every user's data key. No default: without it the app refuses to
       # start rather than encrypt under something guessable.
       kek: ${DATA_ENCRYPTION_KEK}
+    phone:
+      # Base64, at least 32 random bytes: keys the phone number blind index.
+      # No default. Changing it orphans every stored index.
+      blind-index-key: ${PHONE_BLIND_INDEX_KEY}
+      # "mailbox" delivers codes to the account's email inbox instead of by
+      # SMS, so the demo needs no SMS account. A real gateway registers its
+      # own PhoneCodeSender under another value; an unknown value stops startup.
+      sms-provider: ${SMS_PROVIDER:mailbox}
+    selfie:
+      # A selfie image is deleted this long after it is submitted, whatever
+      # was decided. A selfie still waiting for review then is rejected.
+      retention: 7d
+      # Frames must arrive this soon after the check starts.
+      challenge-ttl: 2m
+      # Similarity at or above approve-at is approved, below reject-below is
+      # rejected, and anything between goes to a reviewer.
+      approve-at: 0.85
+      reject-below: 0.60
+      purge-batch-size: 100
+      purge-interval: 1h
+      purge-initial-delay: 5m
+      # "mock" compares images, not faces; a real provider registers its own
+      # LivenessVerifier under another value.
+      liveness-provider: ${LIVENESS_PROVIDER:mock}
+    verification-limits:
+      phone-code:
+        capacity: 5
+        period: 1h
+      phone-confirm:
+        capacity: 20
+        period: 10m
+      selfie-challenge:
+        capacity: 10
+        period: 1h
+      selfie-submission:
+        capacity: 5
+        period: 24h
+      profile-photo:
+        capacity: 10
+        period: 1h
+      vouch:
+        capacity: 10
+        period: 24h
+      max-active-vouches: 5
     two-factor:
       # Shown by authenticator apps next to the code; must not contain ':'.
       issuer: TripMates
