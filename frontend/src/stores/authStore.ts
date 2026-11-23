@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { AccessGrant, AuthMethod, SessionUser } from '../api/accessGrant';
+import type { AccessGrant, AuthMethod, SessionUser, VerificationTier } from '../api/accessGrant';
 import type { SessionRefresher } from '../api/authRefresh';
 import { identityApi, type LoginBody, type RegistrationBody } from '../api/identityApi';
 import { toApiFailure, type ApiFailure } from '../api/problem';
@@ -70,6 +70,12 @@ export interface AuthState {
   abandonSecondFactor: () => void;
   logout: () => Promise<void>;
   revokeAllDevices: () => Promise<ActionResult>;
+  /**
+   * The tier the server just reported, e.g. after a phone code was confirmed,
+   * so tier-gated screens update without waiting for the next token. Display
+   * only: the server checks the tier itself on every request that needs it.
+   */
+  setVerificationTier: (tier: VerificationTier) => void;
 }
 
 const NO_PENDING_VERIFICATION: ApiFailure = localFailure(
@@ -268,6 +274,13 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       return { ok: true };
     } catch (error) {
       return { ok: false, failure: toApiFailure(error) };
+    }
+  },
+
+  setVerificationTier: (tier) => {
+    const user = get().user;
+    if (user !== null && user.verificationTier !== tier) {
+      set({ user: { ...user, verificationTier: tier } });
     }
   },
 }));

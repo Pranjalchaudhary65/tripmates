@@ -524,3 +524,26 @@ describe('logout and revoke-all', () => {
     expect(useAuthStore.getState().accessToken).toBe('token-1');
   });
 });
+
+describe('verification tier', () => {
+  it('takes the tier the server reported, keeping the rest of the session', () => {
+    useAuthStore.getState().setSession({
+      accessToken: 'token-1',
+      user: { id: 'user-1', role: 'USER', verificationTier: 'EMAIL' },
+      authMethods: ['pwd'],
+    });
+
+    useAuthStore.getState().setVerificationTier('PHONE');
+
+    expect(useAuthStore.getState().user).toEqual({ id: 'user-1', role: 'USER', verificationTier: 'PHONE' });
+    expect(useAuthStore.getState().accessToken).toBe('token-1');
+  });
+
+  it('does nothing without a session', () => {
+    useAuthStore.getState().clearSession();
+
+    useAuthStore.getState().setVerificationTier('SELFIE_MATCH');
+
+    expect(useAuthStore.getState().user).toBeNull();
+  });
+});

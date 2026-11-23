@@ -1,6 +1,7 @@
 import { Link, Navigate, Outlet, useLocation } from 'react-router';
-import { useAuthStore } from '../stores/authStore';
+import { useAuthStore, type VerificationTier } from '../stores/authStore';
 import { readReturnPath, type ReturnState } from './returnPath';
+import { tierAtLeast, TIER_REQUIREMENT } from './tiers';
 
 /**
  * These guards decide what to render, never what is allowed: every API
@@ -36,6 +37,28 @@ export function RequireAdmin() {
   if (!authMethods.includes('otp')) {
     return (
       <AccessDenied message="Admin tools need a sign-in with your authenticator app. Log out, then log in again with your code." />
+    );
+  }
+  return <Outlet />;
+}
+
+/**
+ * Screens that only make sense from a verification tier up, such as
+ * vouching for someone, which the server refuses below SELFIE_MATCH. Below
+ * the tier the user is told what is missing and where to get it; nothing
+ * else in the app is gated on verification.
+ */
+export function RequireTier({ minimum }: { minimum: VerificationTier }) {
+  const tier = useAuthStore((state) => state.user?.verificationTier ?? 'NONE');
+  if (!tierAtLeast(tier, minimum)) {
+    return (
+      <section>
+        <h1 className="text-2xl font-bold">Not available yet</h1>
+        <p className="mt-2 text-slate-600">This needs {TIER_REQUIREMENT[minimum]}. It takes a minute or two.</p>
+        <Link to="/account/verification" className="mt-4 inline-block font-medium text-teal-700 underline">
+          Go to the verification centre
+        </Link>
+      </section>
     );
   }
   return <Outlet />;
