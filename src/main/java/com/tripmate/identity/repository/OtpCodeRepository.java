@@ -43,6 +43,10 @@ public interface OtpCodeRepository extends JpaRepository<OtpCode, UUID> {
     Optional<OtpCode> findFirstByUserIdAndChannelAndPurposeOrderByCreatedAtDesc(
             UUID userId, OtpChannel channel, OtpPurpose purpose);
 
+    /** The oldest code still inside a counting window: when it leaves, one more code can be sent. */
+    Optional<OtpCode> findFirstByUserIdAndChannelAndPurposeAndCreatedAtAfterOrderByCreatedAtAsc(
+            UUID userId, OtpChannel channel, OtpPurpose purpose, Instant since);
+
     @Query("""
             select count(o) from OtpCode o
             where o.userId = :userId and o.channel = :channel and o.purpose = :purpose

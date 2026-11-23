@@ -4,6 +4,7 @@ import com.tripmate.identity.entity.OtpChannel;
 import com.tripmate.identity.entity.OtpCode;
 import com.tripmate.identity.entity.OtpPurpose;
 import com.tripmate.identity.entity.User;
+import com.tripmate.identity.entity.VerificationTier;
 import com.tripmate.identity.mail.VerificationCodeIssuedEvent;
 import com.tripmate.identity.repository.OtpCodeRepository;
 import com.tripmate.identity.repository.UserRepository;
@@ -50,15 +51,19 @@ public class OtpService {
 
     private final ApplicationEventPublisher events;
 
+    private final TrustInputEvents trustInputs;
+
     private final Clock clock;
 
     public OtpService(OtpCodeRepository codes, UserRepository users, OtpCodeHasher hasher,
-                      VerificationProperties properties, ApplicationEventPublisher events, Clock clock) {
+                      VerificationProperties properties, ApplicationEventPublisher events, TrustInputEvents trustInputs,
+                      Clock clock) {
         this.codes = codes;
         this.users = users;
         this.hasher = hasher;
         this.properties = properties;
         this.events = events;
+        this.trustInputs = trustInputs;
         this.clock = clock;
     }
 
@@ -152,7 +157,9 @@ public class OtpService {
             return false;
         }
         otp.consume(now);
+        VerificationTier before = user.get().getIdVerificationTier();
         user.get().markEmailVerified(now);
+        trustInputs.tierChanged(user.get().getId(), before, user.get().getIdVerificationTier());
         return true;
     }
 

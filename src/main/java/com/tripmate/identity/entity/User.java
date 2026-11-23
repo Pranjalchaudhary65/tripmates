@@ -14,19 +14,20 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 /**
- * Maps the columns of {@code users} that registration, email verification
- * and two-factor authentication use. Columns owned by later features (phone,
- * trust score) are left unmapped until those features exist; Hibernate's
- * schema validation only checks mapped columns, and inserts leave the rest to
- * their database defaults.
+ * Maps the columns of {@code users} that registration, verification and
+ * two-factor authentication use. Columns owned by later features (trust
+ * score, UPI address) are left unmapped until those features exist;
+ * Hibernate's schema validation only checks mapped columns, and inserts leave
+ * the rest to their database defaults.
  *
- * <p>The TOTP secret is held only as ciphertext under the user's data key
- * ({@code identity.crypto.FieldEncryption}); this class never sees it in
- * plain text.
+ * <p>The TOTP secret and the phone number are held only as ciphertext under
+ * the user's data key ({@code identity.crypto.FieldEncryption}); this class
+ * never sees either in plain text.
  *
  * <p>State changes go through the intent-named methods below; there are no
  * setters, so a caller cannot, say, mark an email verified without also
- * raising the tier.
+ * raising the tier. The tier only moves together with the evidence for it,
+ * which ck_users_tier_evidence checks again in the database.
  */
 @Entity
 @Table(name = "users")
@@ -87,6 +88,18 @@ public class User {
 
     @Column(name = "totp_last_used_step")
     private Long totpLastUsedStep;
+
+    @Column(name = "phone_ciphertext")
+    private byte[] phoneCiphertext;
+
+    @Column(name = "phone_blind_index", length = 64)
+    private String phoneBlindIndex;
+
+    @Column(name = "phone_verified_at")
+    private Instant phoneVerifiedAt;
+
+    @Column(name = "profile_photo_key")
+    private String profilePhotoKey;
 
     protected User() {
     }
@@ -206,6 +219,90 @@ public class User {
     /** An unconfirmed secret is waiting for its first code. */
     public boolean hasPendingTotpEnrolment() {
         return !totpEnabled && totpSecretCiphertext != null;
+    }
+
+    /**
+     * Stores the number a phone code is about to be sent to, replacing any
+     * earlier unconfirmed one. A confirmed number is never replaced here.
+     */
+    public void startPhoneVerification(byte[] ciphertext, String blindIndex, Instant now) {
+        if (isPhoneVerified()) {
+            throw new IllegalStateException("The phone number is already verified");
+        }
+        this.phoneCiphertext = ciphertext.clone();
+        this.phoneBlindIndex = blindIndex;
+        this.updatedAt = now;
+    }
+
+    /**
+     * The stored number was confirmed with a code sent to it.
+     *
+     * @return the tier before, so the caller can tell whether it changed
+     */
+    public VerificationTier markPhoneVerified(Instant now) {
+        if (phoneCiphertext == null || !isEmailVerified()) {
+            throw new IllegalStateException("No pending phone number on a verified account");
+        }
+        VerificationTier before = idVerificationTier;
+        this.phoneVerifiedAt = now;
+        if (!idVerificationTier.isAtLeast(VerificationTier.PHONE)) {
+            this.idVerificationTier = VerificationTier.PHONE;
+        }
+        this.updatedAt = now;
+        return before;
+    }
+
+    /**
+     * A selfie matched the current profile photo.
+     *
+     * @return the tier before
+     */
+    public VerificationTier markSelfieMatched(Instant now) {
+        if (!isPhoneVerified() || profilePhotoKey == null) {
+            throw new IllegalStateException("A selfie match needs a verified phone and a profile photo");
+        }
+        VerificationTier before = idVerificationTier;
+        this.idVerificationTier = VerificationTier.SELFIE_MATCH;
+        this.updatedAt = now;
+        return before;
+    }
+
+    /**
+     * Points the account at a new profile photo. A selfie match was a match
+     * against the old photo, so it no longer says anything about this one:
+     * the tier drops back to PHONE until a new selfie matches.
+     *
+     * @return the tier before
+     */
+    public VerificationTier replaceProfilePhoto(String key, Instant now) {
+        VerificationTier before = idVerificationTier;
+        this.profilePhotoKey = key;
+        if (idVerificationTier == VerificationTier.SELFIE_MATCH) {
+            this.idVerificationTier = VerificationTier.PHONE;
+        }
+        this.updatedAt = now;
+        return before;
+    }
+
+    public boolean isPhoneVerified() {
+        return phoneVerifiedAt != null;
+    }
+
+    /** Ciphertext only; a copy, so the entity's own array cannot be changed through it. */
+    public byte[] getPhoneCiphertext() {
+        return phoneCiphertext == null ? null : phoneCiphertext.clone();
+    }
+
+    public String getPhoneBlindIndex() {
+        return phoneBlindIndex;
+    }
+
+    public Instant getPhoneVerifiedAt() {
+        return phoneVerifiedAt;
+    }
+
+    public String getProfilePhotoKey() {
+        return profilePhotoKey;
     }
 
     public UUID getId() {
