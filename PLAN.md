@@ -90,9 +90,9 @@ Deadline: 2026-11-30.
       (reports are not built yet; they join this screen with the reporting backend)
 
 ## Step 5a — Vibe Profile backend
-- [ ] vibe_profiles, deal_breakers tables
-- [ ] Quiz submission endpoint (12-15 Qs -> 8-dim profile), Bean Validation
-- [ ] Profile edit/retrieve endpoints with ownership checks
+- [x] vibe_profiles, deal_breakers tables
+- [x] Quiz submission endpoint (12-15 Qs -> 8-dim profile), Bean Validation
+- [x] Profile edit/retrieve endpoints with ownership checks
 
 ## Step 5b — Vibe Profile frontend
 - [ ] Multi-step quiz form with saved progress (resume mid-quiz)

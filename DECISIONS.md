@@ -155,3 +155,14 @@ One line per commit: what I built, and the key decision behind it.
   image links only in the server's /media/<token> shape joined to the API
   base, so no response can point an img at another origin, and kept the tier
   guard as a hint only, since the server refuses vouching below the tier.
+- **Step 5a** — Built the vibe quiz (14 questions to the 8 dimensions), the
+  profile and deal-breaker endpoints, and server-side quiz drafts. Kept the
+  questions and their scoring numbers on the server and accepted only option
+  IDs, so a client can never send its own idea of what an answer means.
+  Averaged two questions per dimension with exact half-up rounding and wrote
+  reversed statements with reversed numbers instead of special cases. Saved
+  unfinished quizzes in a vibe_quiz_drafts table over browser storage, which
+  lint already forbids, so a quiz resumes on any device. Locked the user's
+  row through AccountService before every write, so two tabs submitting at
+  once land as one profile instead of a key conflict, without the vibe
+  module touching identity's tables.
