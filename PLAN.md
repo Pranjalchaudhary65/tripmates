@@ -95,8 +95,8 @@ Deadline: 2026-11-30.
 - [x] Profile edit/retrieve endpoints with ownership checks
 
 ## Step 5b — Vibe Profile frontend
-- [ ] Multi-step quiz form with saved progress (resume mid-quiz)
-- [ ] Deal-breakers section, profile edit screen
+- [x] Multi-step quiz form with saved progress (resume mid-quiz)
+- [x] Deal-breakers section, profile edit screen
 
 ## Step 6a — Trips backend: create, browse, PostGIS, optimistic-lock join
 - [ ] trips, trip_members tables (PostGIS geography column + GIST index)

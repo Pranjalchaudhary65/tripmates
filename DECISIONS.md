@@ -166,3 +166,11 @@ One line per commit: what I built, and the key decision behind it.
   row through AccountService before every write, so two tabs submitting at
   once land as one profile instead of a key conflict, without the vibe
   module touching identity's tables.
+- **Step 5b** — Built the multi-step vibe quiz and the vibe screen with hand
+  adjustment and deal-breakers. Saved the answers on the server before every
+  next step, so leaving mid-quiz and coming back (or switching device) picks
+  up at the first unanswered step, with nothing written to browser storage.
+  Dropped saved answers that no longer fit the questions instead of sending
+  them back, and offered a reload when the server says the quiz changed.
+  Grouped two questions per step, which keeps each step one dimension and
+  each save small.
