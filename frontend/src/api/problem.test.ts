@@ -86,6 +86,38 @@ describe('toApiFailure', () => {
     expect(failure.correlationId).toBe(CORRELATION_ID);
   });
 
+  it('words a 413 for a person choosing a file, whatever the body says', async () => {
+    const failure = await failureFor(() =>
+      HttpResponse.json(
+        { status: 413, detail: 'Maximum upload size exceeded; nested exception is ...' },
+        { status: 413, headers: PROBLEM_JSON },
+      ),
+    );
+
+    expect(failure.message).toBe('That file is too large.');
+  });
+
+  it('shows the server wording for the verification codes', async () => {
+    const detail = 'This phone number is already verified on another TripMates account.';
+    const failure = await failureFor(() =>
+      HttpResponse.json({ status: 409, code: 'phone_in_use', detail }, { status: 409, headers: PROBLEM_JSON }),
+    );
+
+    expect(failure.message).toBe(detail);
+  });
+
+  it('never shows the Retry-After wording of a phone code cooldown', async () => {
+    const failure = await failureFor(() =>
+      HttpResponse.json(
+        { status: 429, code: 'phone_code_cooldown', detail: 'Wait for the number of seconds in Retry-After.' },
+        { status: 429, headers: { ...PROBLEM_JSON, 'Retry-After': '30' } },
+      ),
+    );
+
+    expect(failure.message).toBe(RATE_LIMITED_MESSAGE);
+    expect(failure.retryAfterSeconds).toBe(30);
+  });
+
   it('collects field errors by field and keeps request-level ones apart', async () => {
     const failure = await failureFor(() =>
       HttpResponse.json(

@@ -47,10 +47,27 @@ const SERVER_WORDED_CODES: ReadonlySet<string> = new Set([
   'two_factor_not_enabled',
   'two_factor_setup_not_started',
   'two_factor_required_for_admin',
+  'invalid_phone_number',
+  'phone_already_verified',
+  'phone_in_use',
+  'invalid_phone_code',
+  'phone_verification_required',
+  'profile_photo_required',
+  'selfie_already_verified',
+  'selfie_review_pending',
+  'invalid_image',
+  'liveness_challenge_invalid',
+  'vouch_requires_selfie_match',
+  'vouch_limit_reached',
+  'already_vouching',
+  'cannot_vouch_for_self',
+  'verification_already_decided',
+  'cannot_review_own_verification',
 ]);
 
 /**
- * rate_limited is the exception among known codes: its server detail tells
+ * rate_limited is the exception among known codes, and so is every other 429
+ * (phone_code_cooldown, phone_code_daily_limit): their server detail tells
  * an API client to read the Retry-After header, which means nothing to a
  * person. The screen shows the wait itself instead.
  */
@@ -72,6 +89,7 @@ const MESSAGES = {
   unauthorized: 'You need to sign in to do that.',
   forbidden: 'You do not have permission to do that.',
   notFound: 'That could not be found.',
+  tooLarge: 'That file is too large.',
   unavailable: 'TripMates is temporarily unavailable. Please try again shortly.',
   serverError: 'Something went wrong on our side. Please try again.',
   network: 'Could not reach TripMates. Check your internet connection and try again.',
@@ -187,6 +205,9 @@ function messageFor(status: number, code: string | null, detail: unknown, hasFie
   }
   if (status === 404) {
     return MESSAGES.notFound;
+  }
+  if (status === 413) {
+    return MESSAGES.tooLarge;
   }
   if (status === 503) {
     return MESSAGES.unavailable;
