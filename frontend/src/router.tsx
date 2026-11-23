@@ -12,6 +12,8 @@ import { SecurityPage } from './pages/SecurityPage';
 import { SessionsPage } from './pages/SessionsPage';
 import { SignupPage } from './pages/SignupPage';
 import { VerificationPage } from './pages/VerificationPage';
+import { VibeProfilePage } from './pages/VibeProfilePage';
+import { VibeQuizPage } from './pages/VibeQuizPage';
 import { VerifyEmailPage } from './pages/VerifyEmailPage';
 import { VouchPage } from './pages/VouchPage';
 
@@ -43,6 +45,8 @@ export const routes: RouteObject[] = [
           { path: 'account/security', element: <SecurityPage /> },
           { path: 'account/sessions', element: <SessionsPage /> },
           { path: 'account/verification', element: <VerificationPage /> },
+          { path: 'vibe', element: <VibeProfilePage /> },
+          { path: 'vibe/quiz', element: <VibeQuizPage /> },
           {
             element: <RequireTier minimum="SELFIE_MATCH" />,
             children: [{ path: 'account/vouches', element: <VouchPage /> }],

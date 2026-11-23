@@ -53,6 +53,9 @@ function SessionNav() {
 
   return (
     <>
+      <NavLink to="/vibe" end className={navLinkClassName}>
+        My vibe
+      </NavLink>
       <NavLink to="/account/verification" className={navLinkClassName}>
         Verification
       </NavLink>
