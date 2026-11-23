@@ -40,6 +40,8 @@ public final class MailpitClient {
 
     public static final String BACKUP_CODE_USED_SUBJECT = "A backup code was used to sign in to TripMates";
 
+    public static final String PHONE_CODE_SUBJECT = "Your TripMates phone verification code";
+
     private static final Pattern CODE = Pattern.compile("verification code is: (\\d{6})");
 
     private static final Duration TIMEOUT = Duration.ofSeconds(15);
@@ -59,13 +61,26 @@ public final class MailpitClient {
 
     /** Waits until {@code address} has received {@code count} verification emails and returns the newest code. */
     public String awaitVerificationCode(String address, int count) {
-        await().atMost(TIMEOUT).until(() -> countWithSubject(address, VERIFICATION_SUBJECT) >= count);
+        return awaitCode(address, VERIFICATION_SUBJECT, count);
+    }
+
+    /**
+     * Waits until {@code address} has received {@code count} phone codes - the
+     * mailbox SMS provider delivers them to the account's inbox - and returns
+     * the newest one.
+     */
+    public String awaitPhoneCode(String address, int count) {
+        return awaitCode(address, PHONE_CODE_SUBJECT, count);
+    }
+
+    private String awaitCode(String address, String subject, int count) {
+        await().atMost(TIMEOUT).until(() -> countWithSubject(address, subject) >= count);
         DocumentContext results = search(address);
-        List<String> ids = results.read("$.messages[?(@.Subject == '" + VERIFICATION_SUBJECT + "')].ID");
+        List<String> ids = results.read("$.messages[?(@.Subject == '" + subject + "')].ID");
         String text = JsonPath.parse(get("/api/v1/message/" + ids.getFirst())).read("$.Text");
         Matcher matcher = CODE.matcher(text);
         if (!matcher.find()) {
-            throw new AssertionError("No code in verification email: " + text);
+            throw new AssertionError("No code in email: " + text);
         }
         return matcher.group(1);
     }
