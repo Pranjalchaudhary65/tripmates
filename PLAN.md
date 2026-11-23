@@ -82,11 +82,12 @@ Deadline: 2026-11-30.
 - [x] id_verification_tier + vouch bonus/penalty drive Trust Score input events
 
 ## Step 4b — Verification frontend: verification centre
-- [ ] Tier progress bar (NONE/EMAIL/PHONE/SELFIE_MATCH — no document step), phone OTP entry, selfie
+- [x] Tier progress bar (NONE/EMAIL/PHONE/SELFIE_MATCH — no document step), phone OTP entry, selfie
       capture screen (liveness prompt, not a static upload)
-- [ ] Vouch-for-a-friend screen (visible only once SELFIE_MATCH is reached), active vouch list
-- [ ] Route guards extended to require a minimum tier for gated screens
-- [ ] Admin queue screen for flagged/ambiguous verifications and reports — not a general document review queue, since there are no documents
+- [x] Vouch-for-a-friend screen (visible only once SELFIE_MATCH is reached), active vouch list
+- [x] Route guards extended to require a minimum tier for gated screens
+- [x] Admin queue screen for flagged/ambiguous verifications and reports — not a general document review queue, since there are no documents
+      (reports are not built yet; they join this screen with the reporting backend)
 
 ## Step 5a — Vibe Profile backend
 - [ ] vibe_profiles, deal_breakers tables

@@ -145,3 +145,13 @@ One line per commit: what I built, and the key decision behind it.
   rejection reasons a fixed list instead of reviewer text. Left the outbox
   without append-only grants for now, since the relay has to update
   processed_at, and noted that for the trust score step to settle.
+- **Step 4b** — Built the verification centre (tier progress, phone code,
+  profile photo, live selfie check, vouch counts), the vouch screen behind a
+  SELFIE_MATCH tier guard, and the admin selfie review queue. Captured selfie
+  frames only from the live camera through a canvas instead of offering a
+  file picker, and put every camera call behind one module so the screen
+  can be tested without a browser camera. Opened the camera before asking
+  for a challenge, so a refused permission never spends an attempt. Accepted
+  image links only in the server's /media/<token> shape joined to the API
+  base, so no response can point an img at another origin, and kept the tier
+  guard as a hint only, since the server refuses vouching below the tier.
