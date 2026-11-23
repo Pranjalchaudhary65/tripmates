@@ -53,6 +53,9 @@ function SessionNav() {
 
   return (
     <>
+      <NavLink to="/account/verification" className={navLinkClassName}>
+        Verification
+      </NavLink>
       <NavLink to="/account/security" className={navLinkClassName}>
         Security
       </NavLink>
@@ -60,9 +63,14 @@ function SessionNav() {
         Sessions
       </NavLink>
       {isAdmin && (
-        <NavLink to="/admin/users" className={navLinkClassName}>
-          Admin
-        </NavLink>
+        <>
+          <NavLink to="/admin/users" className={navLinkClassName}>
+            Admin
+          </NavLink>
+          <NavLink to="/admin/verifications" className={navLinkClassName}>
+            Review queue
+          </NavLink>
+        </>
       )}
       <button type="button" onClick={handleLogout} className="rounded px-2 py-1 text-sm font-medium hover:bg-teal-600">
         Log out
