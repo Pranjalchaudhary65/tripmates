@@ -9,7 +9,10 @@ public enum EncryptedField {
 
     TOTP_SECRET("users.totp_secret_ciphertext"),
 
-    PHONE("users.phone_ciphertext");
+    PHONE("users.phone_ciphertext"),
+
+    /** Sealed under the sender's key, so erasing the sender erases what they wrote. */
+    CHAT_MESSAGE("chat_messages.body_ciphertext");
 
     private final String column;
 

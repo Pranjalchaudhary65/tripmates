@@ -11,6 +11,7 @@ import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -50,9 +51,20 @@ public class FieldEncryption {
     /** Seals {@code plaintext} for {@code field} of the locked {@code user}, creating their data key if needed. */
     @Transactional(propagation = Propagation.MANDATORY)
     public byte[] encrypt(User user, EncryptedField field, byte[] plaintext) {
+        return encrypt(user, field, null, plaintext);
+    }
+
+    /**
+     * Seals a value that belongs to one row among many of the same user, such
+     * as one chat message. {@code context} names that row and joins the
+     * additional data, so the ciphertext opens only for the row it was
+     * written for, not for another row of the same user and column.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public byte[] encrypt(User user, EncryptedField field, String context, byte[] plaintext) {
         byte[] dataKey = user.getEncryptionKeyId() == null ? createDataKey(user) : unwrap(user);
         try {
-            byte[] sealed = AesGcm.seal(dataKey, plaintext, additionalData(field, user.getId()));
+            byte[] sealed = AesGcm.seal(dataKey, plaintext, additionalData(field, user.getId(), context));
             byte[] out = new byte[1 + sealed.length];
             out[0] = VERSION;
             System.arraycopy(sealed, 0, out, 1, sealed.length);
@@ -68,6 +80,32 @@ public class FieldEncryption {
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public byte[] decrypt(User user, EncryptedField field, byte[] ciphertext) {
+        return decrypt(user, field, null, ciphertext);
+    }
+
+    /**
+     * Like {@link #decrypt(User, EncryptedField, String, byte[])}, but an
+     * unreadable value is empty instead of an exception. A caller that shows
+     * "no longer available" must use this one: an exception thrown out of a
+     * transactional method marks the caller's whole transaction rollback-only,
+     * even when the caller catches it, and the request would fail anyway.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Optional<byte[]> tryDecrypt(User user, EncryptedField field, String context, byte[] ciphertext) {
+        try {
+            return Optional.of(decryptValue(user, field, context, ciphertext));
+        } catch (DecryptionFailedException unreadable) {
+            return Optional.empty();
+        }
+    }
+
+    /** Opens a value sealed with {@link #encrypt(User, EncryptedField, String, byte[])} for the same context. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public byte[] decrypt(User user, EncryptedField field, String context, byte[] ciphertext) {
+        return decryptValue(user, field, context, ciphertext);
+    }
+
+    private byte[] decryptValue(User user, EncryptedField field, String context, byte[] ciphertext) {
         if (ciphertext == null || ciphertext.length < 2 || ciphertext[0] != VERSION) {
             throw new DecryptionFailedException("Field ciphertext has an unknown format");
         }
@@ -77,7 +115,7 @@ public class FieldEncryption {
         byte[] dataKey = unwrap(user);
         try {
             return AesGcm.open(dataKey, Arrays.copyOfRange(ciphertext, 1, ciphertext.length),
-                    additionalData(field, user.getId()));
+                    additionalData(field, user.getId(), context));
         } finally {
             Arrays.fill(dataKey, (byte) 0);
         }
@@ -113,7 +151,9 @@ public class FieldEncryption {
         return kek.unwrap(key.getWrappedDek(), key.getId(), user.getId());
     }
 
-    private static String additionalData(EncryptedField field, UUID userId) {
-        return field.column() + "|" + userId;
+    /** Without a context the additional data is exactly what it was before contexts existed. */
+    private static String additionalData(EncryptedField field, UUID userId, String context) {
+        String base = field.column() + "|" + userId;
+        return context == null ? base : base + "|" + context;
     }
 }
