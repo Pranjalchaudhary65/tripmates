@@ -1,5 +1,6 @@
 package com.tripmate.platform.security;
 
+import com.tripmate.chat.websocket.ChatWebSocketConfig;
 import com.tripmate.identity.controller.AdminUserController;
 import com.tripmate.identity.controller.LoginController;
 import com.tripmate.identity.controller.MediaController;
@@ -46,7 +47,7 @@ import java.util.List;
  * Deny-by-default: the only anonymous routes are the health probes, the
  * OpenAPI document and its UI, the container's internal error dispatch, and
  * the POST-only sign-up, email-verification, login and refresh routes, and
- * GET on signed media links.
+ * GET on signed media links and on the chat socket's handshake.
  * Every other path - including /api/v1 paths that do not exist - needs a
  * valid bearer access token whose session is still alive, and answers 401
  * otherwise, so an anonymous caller cannot probe which endpoints exist.
@@ -79,13 +80,18 @@ public class SecurityConfig {
     };
 
     /**
-     * Health, the API docs, and signed media links: a media link carries its
-     * own HMAC authorisation, since an image tag cannot send a bearer token.
+     * Health, the API docs, signed media links, and the chat socket's
+     * handshake. A media link carries its own HMAC authorisation, since an
+     * image tag cannot send a bearer token. A browser cannot put headers on a
+     * WebSocket handshake either, so the socket is authenticated by the
+     * token in its STOMP CONNECT frame (StompAuthChannelInterceptor), and an
+     * unauthenticated socket can do nothing but send that frame.
      */
     static final String[] PUBLIC_GET_ROUTES = {
             "/actuator/health", "/actuator/health/**",
             "/v3/api-docs", "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**",
             ApiPaths.V1 + MediaController.BASE + MediaController.BY_TOKEN,
+            ChatWebSocketConfig.ENDPOINT,
     };
 
     /** The one route that acts on a cookie and changes state, so the one that needs a CSRF check. */
