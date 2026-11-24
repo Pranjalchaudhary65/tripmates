@@ -112,7 +112,7 @@ dependencies.
 | Module | Owns tables | Depends on |
 |---|---|---|
 | `identity` | users, user_encryption_keys, identity_verifications, vouches, otp_codes, totp_backup_codes, refresh_token_families, login_history; publishes the read-only view user_public_facts for other modules' SQL | — (foundation) |
-| `vibe` | vibe_profiles, deal_breakers | identity |
+| `vibe` | vibe_profiles, deal_breakers, vibe_quiz_drafts; publishes the read-only view deal_breaker_facts for matching | identity |
 | `trips` | trips, trip_members, match_score_cache | identity, vibe |
 | `chat` | conversations, chat_messages, moderation_flags | identity, trips |
 | `meetup` | meetups, meetup_checkins, meetup_feedback, verified_venues | identity, trips |
@@ -987,6 +987,59 @@ party's `vibe_profiles` row changes. Recomputing a weighted score across a
 browse page of 50 trips on every request is wasted CPU when vibe profiles
 change rarely; this is a plain read-through cache, not an event-sourced
 table, so it carries no `version` or history.
+
+**As built (matching).** Matching compares a viewer with a trip: the
+trip's host's vibe profile and the trip's own budget band.
+
+- **Two halves, in order.** First the deal-breakers, as SQL
+  (`trips.repository.DealBreakerRules`), on both sides: smoking and drinking
+  (`NO` against `OK` rules out, `EITHER` goes with both), gender (`SAME`
+  needs both genders on record and equal, so `PREFER_NOT_TO_SAY` cannot meet
+  a `SAME` preference on either side), and trust (each side's
+  `users.trust_score` must reach the other's `min_trust_score`). A user with
+  no `deal_breakers` row has no limits. Browse ANDs every rule into its WHERE
+  clause, so a ruled-out trip is never listed; the detail screen selects each
+  rule as a column and names the one that failed; a join request against a
+  ruled-out trip is refused (`409 deal_breaker_conflict`), so a host's limits
+  hold even for someone arriving through a link. Only then the soft score.
+- **`deal_breaker_facts`**, a read-only view vibe publishes (`V10`), is how
+  the trips module reads deal-breakers in SQL, the same pattern as
+  `user_public_facts`. The soft score reads profiles through
+  `vibe.service.MatchProfiles`, a module-to-module service no endpoint
+  reaches.
+- **Soft score** (`trips.service.MatchScorer`, pluggable; the default
+  `RuleBasedMatchScorer` needs no API key, chosen by
+  `tripmate.matching.scorer`). Weights: budget 20, pace 15, social energy 15,
+  expenses 15, wake time 10, planning 10, risk 10, food 5 (sum 100). Each
+  dimension scores a closeness 0-1: ordered values and the 1-5 scales by
+  1 − distance / widest distance; expense styles have no order (same = 1,
+  "whoever can" vs "take turns" = ½, "split exactly" vs either = 0). The
+  score is the weighted sum, rounded half up. Closeness ≥ ⅔ is a match,
+  ≤ ⅓ a mismatch, anything between is left out of the explanation. Deal-
+  breakers never pass through the scorer, so no implementation of it can let
+  a ruled-out trip through.
+- **Explanation.** `matches[]` and `mismatches[]` of `{dimension, label}`,
+  heaviest first, worded from the viewer's side ("You are both early
+  birds.", "You are an early bird; the host is a night owl."). Every label is
+  a fixed sentence built from enum values; none carries user text. A
+  blocked match carries `blockers[]` of `{rule, label}` instead and no score.
+  Statuses: `SCORED`, `BLOCKED`, `NEEDS_YOUR_PROFILE`, `HOST_HAS_NO_PROFILE`.
+  The host gets no match on their own trip.
+- **Cache columns added**: `scorer`, `viewer_profile_at`, `host_profile_at`
+  (`V11`). Instead of relying on a delete arriving when a profile changes, a
+  row is served only while its scorer and both stamps equal the current
+  profiles' `updated_at`; otherwise it is recomputed and replaced
+  (`INSERT ... ON CONFLICT DO UPDATE`). That makes invalidation exact at the
+  moment the profile change commits, with no window in which a reader can
+  write back a score computed from the old profile, and changing the scoring
+  rules (a new `scorer` id) invalidates every row at once. Deal-breakers are
+  never cached, so a changed limit, gender or trust score applies on the next
+  read. Deleting stale rows by user (`idx_match_score_cache_user`) is left to
+  the outbox relay, which `VIBE_PROFILE_CHANGED` already feeds; until it
+  exists stale rows are simply overwritten when next read.
+- **Responses.** `TripDetailResponse.match` carries the whole breakdown (one
+  call for the trip screen); `TripSummaryResponse.matchScore` carries the
+  score on browse cards, null where it cannot be scored.
 
 ### 4. Guided Masked Chat
 
