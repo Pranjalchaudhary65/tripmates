@@ -113,7 +113,7 @@ dependencies.
 |---|---|---|
 | `identity` | users, user_encryption_keys, identity_verifications, vouches, otp_codes, totp_backup_codes, refresh_token_families, login_history; publishes the read-only view user_public_facts for other modules' SQL | — (foundation) |
 | `vibe` | vibe_profiles, deal_breakers, vibe_quiz_drafts; publishes the read-only view deal_breaker_facts for matching | identity |
-| `trips` | trips, trip_members, match_score_cache | identity, vibe |
+| `trips` | trips, trip_members, match_score_cache; publishes the read-only view trip_facts for other modules' SQL | identity, vibe |
 | `chat` | conversations, chat_messages, moderation_flags | identity, trips |
 | `meetup` | meetups, meetup_checkins, meetup_feedback, verified_venues | identity, trips |
 | `settlement` | ledger_entries, settlements, settlement_state_transitions, expenses, expense_shares | identity, trips |
@@ -1088,6 +1088,63 @@ moderation_flags
   auto_action      VARCHAR(30) CHECK (auto_action IN ('NONE','TRUST_SCORE_PENALTY','AUTO_SUSPEND'))
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 ```
+
+**As built (chat).** What the chat module added or changed while building
+it (`V12`, `V13`):
+
+- **Opening.** A conversation is created when a host accepts a join
+  request: trips publishes `CompanionAccepted` inside the accept's
+  transaction and chat listens in that same transaction, so the
+  conversation commits or rolls back with the acceptance and trips never
+  calls chat. Companions accepted before chat existed got theirs in `V13`.
+- **`trip_facts`**, a read-only view trips publishes (`V12`), is how chat
+  (and later meet-ups) read a trip's title, place, dates and status in
+  SQL, the same pattern as `user_public_facts`.
+- **Bodies are encrypted, not plain `TEXT`.** `chat_messages.body` became
+  `body_ciphertext BYTEA`: AES-GCM under the *sender's* data key, with the
+  conversation ID and message number in the additional data, so a sealed
+  body copied onto another row does not open. Crypto-shredding a user
+  erases what they wrote; the other person's history then shows those
+  messages as no longer available instead of failing. Pipeline before
+  sealing: markup stripped by the OWASP sanitizer's HTML lexer (text nodes
+  kept, every element and script/style content dropped), invisible and
+  direction-changing characters removed, NFC; then contact details
+  (emails, UPI IDs, links, @handles, 10+ digit numbers) replaced with
+  `[contact hidden]`. The unredacted text is never stored.
+- **Message numbers.** `seq` 1, 2, 3... per conversation, taken from
+  `conversations.last_seq` under the conversation's row lock, replaces the
+  `(conversation_id, created_at)` index with `UNIQUE (conversation_id, seq)`:
+  gap-free, never shared, a history cursor and the basis of read markers
+  (`host_read_seq`, `requester_read_seq`) and unread counts.
+- **Idempotent send.** `client_message_id`, unique per conversation and
+  sender: a retried send returns the stored message; the same ID with other
+  text is refused (`409 message_id_reused`).
+- **SYSTEM messages** carry a fixed `system_code` and no text, so nothing a
+  system message says can be mistaken for either person's words.
+  **Icebreakers are not messages at all**: `GET .../icebreakers` returns
+  suggestions to the asker only, built by a pluggable `IcebreakerGenerator`
+  (rule-based default from trip facts, `tripmate.chat.icebreakers`), each
+  cleaned and redacted like a message; sending one is the user's own act.
+- **Moderation.** A pluggable `MessageClassifier` (rule-based default,
+  `tripmate.chat.classifier`) labels the cleaned text before redaction. A
+  flagged message is still delivered with its flag, so both people see a
+  warning; every label is a `moderation_flags` row; a label at or above
+  `penalty-confidence` (0.95: money asked for, threats, sexual demands) is
+  also a `CHAT_MESSAGE_FLAGGED` outbox event for the trust score. Nothing
+  is ever auto-suspended on a pattern match.
+- **Socket.** STOMP over WebSocket at `/api/v1/ws`, handshake origin-checked
+  against the CORS allowlist and otherwise open, authenticated by the
+  access token in the CONNECT frame. Clients may subscribe to
+  `/user/queue/chat` only and send only typing notices; messages are sent
+  over HTTP and pushed after commit to both people's own queues. Sockets
+  are swept every 30 s and closed once their token expires or their session
+  ends. The broker is in memory, so pushes reach sockets on the same
+  instance only; running a second instance needs a shared relay (Redis
+  pub/sub fanning each push out to every instance) first. Nothing is lost
+  meanwhile: a client that misses a push refetches on reconnect.
+- **Contact unlock.** `GET .../contact` returns the other person's name,
+  email and verified phone only while `contact_unlocked_at` is set, which
+  the trip-lock gate sets; otherwise `409 contact_locked`.
 
 ### 5. Public Meet-up Protocol
 
