@@ -125,6 +125,13 @@ tripmate:
     # other changes on the same trip before it answers trip_busy.
     slot-claim-attempts: 5
 
+  matching:
+    # Which MatchScorer computes the soft score. "rule-based" (the default) is a
+    # fixed weighted comparison that needs no API key. Deal-breakers are hard
+    # filters in SQL and never go through the scorer, whichever is chosen. An
+    # unknown value leaves no scorer, so the app refuses to start.
+    scorer: rule-based
+
   storage:
     # Where uploaded images are kept. Relative paths resolve against the
     # working directory; uploads/ is git-ignored and never served statically.
