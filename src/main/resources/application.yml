@@ -155,6 +155,42 @@ tripmate:
       # session; the most a revoked session's socket can outlive it by.
       sweep-interval: 30s
 
+  meetup:
+    # Per account: proposing, confirming, cancelling, checking in and rating
+    # together; and the match screen with venue searches.
+    write-limit:
+      capacity: 60
+      period: 1h
+    read-limit:
+      capacity: 600
+      period: 10m
+    venue-radius-km: 25
+    # A meet-up starts at least an hour after sunrise and at least two hours
+    # before sunset at the venue, so it ends in daylight too.
+    after-sunrise: 1h
+    before-sunset: 2h
+    min-notice: 3h
+    max-ahead: 30d
+    window-days: 14
+    checkin-opens-before: 30m
+    checkin-closes-after: 90m
+    # Someone not checked in and not "safe" this long after the start gets an
+    # email; then their emergency contact is alerted.
+    ping-after: 30m
+    escalate-after: 60m
+    # A private comfort rating below this stops the match.
+    comfort-threshold: 3
+    # A change-of-plan cancellation this close to a confirmed start is a trust input.
+    late-cancel-within: 24h
+    selfie-retention: 7d
+    job-interval: 1m
+    job-batch: 100
+    max-location-accuracy-meters: 150
+    # "mailbox" sends the alert text to the user's own inbox instead of an
+    # SMS to the contact, so the demo needs no SMS account. A real gateway
+    # registers its own EmergencyAlertSender; an unknown value stops startup.
+    alert-sender: ${MEETUP_ALERT_SENDER:mailbox}
+
   matching:
     # Which MatchScorer computes the soft score. "rule-based" (the default) is a
     # fixed weighted comparison that needs no API key. Deal-breakers are hard
@@ -274,6 +310,9 @@ tripmate:
       vouch:
         capacity: 10
         period: 24h
+      emergency-contact:
+        capacity: 20
+        period: 1h
       max-active-vouches: 5
     two-factor:
       # Shown by authenticator apps next to the code; must not contain ':'.

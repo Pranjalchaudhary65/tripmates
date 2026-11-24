@@ -17,12 +17,13 @@ import java.util.Objects;
  *                         finding a photo that passes
  * @param profilePhoto     replacing the profile photo
  * @param vouch            vouching for someone
+ * @param emergencyContact setting or removing the emergency contact
  * @param maxActiveVouches how many people one account can vouch for at once
  */
 @ConfigurationProperties("tripmate.identity.verification-limits")
 public record VerificationLimitProperties(RateLimit phoneCode, RateLimit phoneConfirm, RateLimit selfieChallenge,
                                           RateLimit selfieSubmission, RateLimit profilePhoto, RateLimit vouch,
-                                          int maxActiveVouches) {
+                                          RateLimit emergencyContact, int maxActiveVouches) {
 
     public VerificationLimitProperties {
         String prefix = "tripmate.identity.verification-limits.";
@@ -32,6 +33,7 @@ public record VerificationLimitProperties(RateLimit phoneCode, RateLimit phoneCo
         Objects.requireNonNull(selfieSubmission, prefix + "selfie-submission is required");
         Objects.requireNonNull(profilePhoto, prefix + "profile-photo is required");
         Objects.requireNonNull(vouch, prefix + "vouch is required");
+        Objects.requireNonNull(emergencyContact, prefix + "emergency-contact is required");
         if (maxActiveVouches < 1) {
             throw new IllegalArgumentException(prefix + "max-active-vouches must be positive");
         }

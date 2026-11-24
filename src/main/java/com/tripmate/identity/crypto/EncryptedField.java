@@ -12,7 +12,12 @@ public enum EncryptedField {
     PHONE("users.phone_ciphertext"),
 
     /** Sealed under the sender's key, so erasing the sender erases what they wrote. */
-    CHAT_MESSAGE("chat_messages.body_ciphertext");
+    CHAT_MESSAGE("chat_messages.body_ciphertext"),
+
+    EMERGENCY_CONTACT_PHONE("emergency_contacts.phone_ciphertext"),
+
+    /** A private note a user keeps about a meet-up, sealed under their own key. */
+    MEETUP_PRIVATE_NOTE("meetup.private_note");
 
     private final String column;
 

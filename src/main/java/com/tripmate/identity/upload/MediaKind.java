@@ -12,10 +12,13 @@ public enum MediaKind {
 
     PROFILE_PHOTO("profile-photos"),
 
-    SELFIE("selfies");
+    SELFIE("selfies"),
+
+    /** Taken at a meet-up check-in; kept for the safety team only, then purged. */
+    MEETUP_SELFIE("meetup-selfies");
 
     /** Every key any kind can produce, and nothing else: no "..", no slashes beyond the one. */
-    static final Pattern KEY = Pattern.compile("^(profile-photos|selfies)/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-"
+    static final Pattern KEY = Pattern.compile("^(profile-photos|selfies|meetup-selfies)/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-"
             + "[0-9a-f]{4}-[0-9a-f]{12}\\.jpg$");
 
     private final String prefix;
