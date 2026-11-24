@@ -4,6 +4,7 @@ import com.tripmate.identity.token.SessionPrincipal;
 import com.tripmate.platform.error.ApiProblemException;
 import com.tripmate.platform.openapi.OpenApiConfig;
 import com.tripmate.platform.web.PageResponse;
+import com.tripmate.platform.web.Paging;
 import com.tripmate.trips.dto.CreateTripRequest;
 import com.tripmate.trips.dto.JoinRequestCreatedResponse;
 import com.tripmate.trips.dto.TripDetailResponse;

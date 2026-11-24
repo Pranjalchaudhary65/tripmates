@@ -1,4 +1,4 @@
-package com.tripmate.trips.controller;
+package com.tripmate.platform.web;
 
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -9,18 +9,18 @@ import org.springframework.data.domain.Pageable;
  * nearest page that is allowed. The page number is capped too, so no offset
  * can run into the millions.
  */
-final class Paging {
+public final class Paging {
 
-    static final int DEFAULT_SIZE = 20;
+    public static final int DEFAULT_SIZE = 20;
 
-    static final int MAX_SIZE = 50;
+    public static final int MAX_SIZE = 50;
 
-    static final int MAX_PAGE = 1_000;
+    public static final int MAX_PAGE = 1_000;
 
     private Paging() {
     }
 
-    static Pageable of(int page, int size) {
+    public static Pageable of(int page, int size) {
         return PageRequest.of(Math.clamp(page, 0, MAX_PAGE), Math.clamp(size, 1, MAX_SIZE));
     }
 }

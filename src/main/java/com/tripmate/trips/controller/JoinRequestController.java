@@ -3,6 +3,7 @@ package com.tripmate.trips.controller;
 import com.tripmate.identity.token.SessionPrincipal;
 import com.tripmate.platform.openapi.OpenApiConfig;
 import com.tripmate.platform.web.PageResponse;
+import com.tripmate.platform.web.Paging;
 import com.tripmate.trips.dto.IncomingRequestResponse;
 import com.tripmate.trips.dto.JoinDecisionResponse;
 import com.tripmate.trips.dto.OutgoingRequestResponse;
