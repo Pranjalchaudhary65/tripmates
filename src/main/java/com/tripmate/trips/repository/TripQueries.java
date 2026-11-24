@@ -25,18 +25,27 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * The list and detail reads behind the trip screens, one query per screen.
  *
- * <p>Other people's names and tiers come from {@code user_public_facts}, the
- * view identity publishes for other modules; nothing here reads
- * {@code users} itself. Every value reaches SQL as a bound parameter; the
- * only text joined into a statement is the fixed fragments below, chosen by
- * which filters are present.
+ * <p>Other people's names, tiers, gender and trust score come from
+ * {@code user_public_facts}, the view identity publishes for other modules,
+ * and deal-breakers from {@code deal_breaker_facts}, the one vibe publishes;
+ * nothing here reads {@code users} or {@code deal_breakers} itself. Every
+ * value reaches SQL as a bound parameter; the only text joined into a
+ * statement is the fixed fragments here and in {@link DealBreakerRules},
+ * chosen by which filters are present.
  */
 @Repository
 public class TripQueries {
@@ -67,14 +76,16 @@ public class TripQueries {
 
     /**
      * Open trips other people host, not yet started, whose host is still
-     * active, soonest first.
+     * active and whose deal-breakers and the viewer's leave each other in,
+     * soonest first.
      */
     public Page<TripCard> browse(UUID viewer, TripFilter filter, LocalDate today, Pageable pageable) {
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("viewer", viewer)
                 .addValue("today", today);
         StringBuilder where = new StringBuilder("""
-                WHERE t.status = 'OPEN' AND t.start_date >= :today AND h.active AND t.host_user_id <> :viewer""");
+                WHERE t.status = 'OPEN' AND t.start_date >= :today AND h.active AND t.host_user_id <> :viewer""")
+                .append("\n  AND ").append(DealBreakerRules.ALL_PASS);
         String distance = "NULL::double precision";
         if (filter.near() != null) {
             params.addValue("latitude", filter.near().latitude())
@@ -95,10 +106,54 @@ public class TripQueries {
             params.addValue("budgets", filter.budgets().stream().map(BudgetBand::name).sorted().toList());
             where.append(" AND t.budget_band IN (:budgets)");
         }
-        long total = count(CARD_FROM + "\n" + where, params);
-        List<TripCard> cards = page("SELECT " + CARD_COLUMNS + ", " + distance + " AS distance_km\n" + CARD_FROM
+        String from = CARD_FROM + "\n" + DealBreakerRules.JOINS;
+        long total = count(from + "\n" + where, params);
+        List<TripCard> cards = page("SELECT " + CARD_COLUMNS + ", " + distance + " AS distance_km\n" + from
                 + "\n" + where + "\nORDER BY t.start_date, t.created_at, t.id", params, pageable, TripQueries::card);
         return new PageImpl<>(cards, pageable, total);
+    }
+
+    /**
+     * The deal-breakers that rule this trip out for the viewer; empty when
+     * none does, or when there is no such trip.
+     */
+    public Set<DealBreakerRules.Rule> failedDealBreakers(UUID tripId, UUID viewer) {
+        String columns = Arrays.stream(DealBreakerRules.Rule.values())
+                .map(rule -> "(" + DealBreakerRules.PASSES.get(rule) + ") AS " + DealBreakerRules.column(rule))
+                .collect(Collectors.joining(",\n"));
+        MapSqlParameterSource params = new MapSqlParameterSource().addValue("viewer", viewer).addValue("trip", tripId);
+        List<Set<DealBreakerRules.Rule>> rows = jdbc.query("SELECT " + columns + """
+
+                FROM trips t
+                JOIN user_public_facts h ON h.user_id = t.host_user_id
+                """ + DealBreakerRules.JOINS + "\nWHERE t.id = :trip", params, (rs, row) -> {
+            Set<DealBreakerRules.Rule> failed = EnumSet.noneOf(DealBreakerRules.Rule.class);
+            for (DealBreakerRules.Rule rule : DealBreakerRules.Rule.values()) {
+                if (!rs.getBoolean(DealBreakerRules.column(rule))) {
+                    failed.add(rule);
+                }
+            }
+            return failed;
+        });
+        return rows.isEmpty() ? Set.of() : Set.copyOf(rows.getFirst());
+    }
+
+    /** What matching needs to know about each trip: its host and its budget. Unknown IDs are absent. */
+    public Map<UUID, MatchTarget> matchTargets(Collection<UUID> tripIds) {
+        if (tripIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, MatchTarget> targets = new HashMap<>();
+        jdbc.query("SELECT id, host_user_id, budget_band FROM trips WHERE id IN (:ids)",
+                new MapSqlParameterSource("ids", Set.copyOf(tripIds)), rs -> {
+                    targets.put(rs.getObject("id", UUID.class), new MatchTarget(rs.getObject("host_user_id",
+                            UUID.class), BudgetBand.valueOf(rs.getString("budget_band"))));
+                });
+        return Map.copyOf(targets);
+    }
+
+    /** A trip as matching sees it; the host's ID never leaves the service layer. */
+    public record MatchTarget(UUID hostUserId, BudgetBand budgetBand) {
     }
 
     /** Every trip the viewer hosts, those still to come first, then the most recent. */

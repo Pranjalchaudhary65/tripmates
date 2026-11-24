@@ -24,6 +24,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -32,6 +33,9 @@ import java.util.UUID;
  * <p>A trip is visible to its host, to anyone with a request on it, and,
  * while it is OPEN or FULL and its host is still active, to every signed-in
  * user. Anything else answers 404, the same as an ID that does not exist.
+ * A trip a deal-breaker rules out is left out of browse but can still be
+ * read through a link: its match says BLOCKED, and asking to join it is
+ * refused.
  */
 @Service
 @EnableConfigurationProperties(TripProperties.class)
@@ -57,6 +61,8 @@ public class TripService {
 
     private final TripProperties properties;
 
+    private final MatchService matches;
+
     private final TransactionTemplate transactions;
 
     private final TransactionTemplate readOnly;
@@ -64,12 +70,14 @@ public class TripService {
     private final Clock clock;
 
     public TripService(AccountService accounts, TripRepository trips, TripQueries queries, RateLimiter rateLimiter,
-                       TripProperties properties, PlatformTransactionManager transactionManager, Clock clock) {
+                       TripProperties properties, MatchService matches, PlatformTransactionManager transactionManager,
+                       Clock clock) {
         this.accounts = accounts;
         this.trips = trips;
         this.queries = queries;
         this.rateLimiter = rateLimiter;
         this.properties = properties;
+        this.matches = matches;
         this.transactions = new TransactionTemplate(transactionManager);
         this.readOnly = new TransactionTemplate(transactionManager);
         this.readOnly.setReadOnly(true);
@@ -80,7 +88,7 @@ public class TripService {
      * Opens a trip hosted by the caller. The cap on current trips is counted
      * under the caller's user row lock, so parallel requests cannot pass it.
      */
-    public TripPage open(SessionPrincipal caller, TripDetails details) {
+    public TripView open(SessionPrincipal caller, TripDetails details) {
         rateLimiter.consume(CREATE_BUCKET, caller.userId().toString(), properties.createLimit());
         LocalDate today = TripCalendar.today(clock);
         requireValidDates(details.startDate(), details.endDate(), today);
@@ -91,15 +99,21 @@ public class TripService {
             }
             return trips.save(Trip.open(caller.userId(), details, clock.instant())).getId();
         });
-        return find(caller, tripId);
+        return new TripView(find(caller, tripId), null);
     }
 
-    public Page<TripCard> browse(SessionPrincipal caller, TripFilter filter, Pageable pageable) {
+    /**
+     * Trips the caller could join, each with its match score where both
+     * sides have a vibe profile. Trips a deal-breaker rules out are not
+     * listed at all.
+     */
+    public Browse browse(SessionPrincipal caller, TripFilter filter, Pageable pageable) {
         consumeRead(caller);
-        return readOnly.execute(status -> {
+        Page<TripCard> page = readOnly.execute(status -> {
             accounts.requireActive(caller);
             return queries.browse(caller.userId(), filter, TripCalendar.today(clock), pageable);
         });
+        return new Browse(page, matches.scores(caller.userId(), page.map(TripCard::id).getContent()));
     }
 
     public Page<TripCard> hosted(SessionPrincipal caller, Pageable pageable) {
@@ -110,9 +124,11 @@ public class TripService {
         });
     }
 
-    public TripPage detail(SessionPrincipal caller, UUID tripId) {
+    /** The trip, and for anyone but its host, how well they match it and why. */
+    public TripView detail(SessionPrincipal caller, UUID tripId) {
         consumeRead(caller);
-        return find(caller, tripId);
+        TripPage page = find(caller, tripId);
+        return new TripView(page, page.card().hostedByViewer() ? null : matches.explain(caller.userId(), tripId));
     }
 
     private TripPage find(SessionPrincipal caller, UUID tripId) {
@@ -150,5 +166,13 @@ public class TripService {
 
     private void consumeRead(SessionPrincipal caller) {
         rateLimiter.consume(READ_BUCKET, caller.userId().toString(), properties.readLimit());
+    }
+
+    /** @param scores match score by trip ID; a trip that could not be scored is absent */
+    public record Browse(Page<TripCard> page, Map<UUID, Integer> scores) {
+    }
+
+    /** @param match null on the caller's own trip */
+    public record TripView(TripPage page, MatchService.MatchView match) {
     }
 }

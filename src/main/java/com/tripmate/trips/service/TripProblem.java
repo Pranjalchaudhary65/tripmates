@@ -31,6 +31,10 @@ public enum TripProblem implements ProblemType {
 
     TRIP_CLOSED(HttpStatus.CONFLICT, "trip_closed", "This trip is no longer taking companions.", null),
 
+    /** A deal-breaker on one side or the other rules the trip out; which one is on the trip page. */
+    DEAL_BREAKER_CONFLICT(HttpStatus.CONFLICT, "deal_breaker_conflict",
+            "Your deal-breakers and this trip's host's do not fit together, so you cannot ask to join it.", null),
+
     JOIN_REQUEST_DECIDED(HttpStatus.CONFLICT, "join_request_decided",
             "This request has already been answered.", null),
 

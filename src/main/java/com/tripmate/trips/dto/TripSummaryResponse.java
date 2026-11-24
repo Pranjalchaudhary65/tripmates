@@ -45,7 +45,11 @@ public record TripSummaryResponse(
         MyRequest myRequest,
 
         @Schema(description = "Requests waiting for an answer; only for the trip's host, otherwise null")
-        Integer pendingRequests) {
+        Integer pendingRequests,
+
+        @Schema(description = "How well the caller fits the trip, 0-100; null when it cannot be scored (a side "
+                + "without a vibe profile, or the caller's own trip)")
+        Integer matchScore) {
 
     public record MyRequest(UUID id, MemberStatus status) {
     }

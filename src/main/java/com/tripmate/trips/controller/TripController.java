@@ -110,7 +110,8 @@ public class TripController {
     @Operation(summary = "Browse open trips other people host",
             description = "Trips not started yet, soonest first. A search point needs latitude, longitude and "
                     + "radiusKm together. from and to keep trips that start on or after from and end on or "
-                    + "before to.")
+                    + "before to. Trips a deal-breaker on either side rules out are left out; each trip carries "
+                    + "the caller's match score where both sides have a vibe profile.")
     @ApiResponse(responseCode = "200", description = "One page of trips")
     @ApiResponse(responseCode = "400", description = "invalid_location_filter, invalid_date_filter, or a value "
             + "that is not a number, date or budget band",
@@ -128,8 +129,8 @@ public class TripController {
             @RequestParam(defaultValue = "" + Paging.DEFAULT_SIZE) int size) {
         TripFilter filter = new TripFilter(near(latitude, longitude, radiusKm), from, dateTo(from, to),
                 budget == null || budget.isEmpty() ? Set.of() : EnumSet.copyOf(budget));
-        return PageResponse.of(trips.browse(SessionPrincipal.of(token), filter, Paging.of(page, size)),
-                mapper::toResponse);
+        TripService.Browse found = trips.browse(SessionPrincipal.of(token), filter, Paging.of(page, size));
+        return PageResponse.of(found.page(), card -> mapper.toResponse(card, found.scores().get(card.id())));
     }
 
     @GetMapping(HOSTED)
@@ -145,7 +146,8 @@ public class TripController {
     @GetMapping(TRIP)
     @Operation(summary = "One trip",
             description = "Open and full trips are visible to everyone signed in; any other trip only to its "
-                    + "host and to people with a request on it.")
+                    + "host and to people with a request on it. Anyone but the host also gets how well they match "
+                    + "it, with the reasons, or the deal-breaker that rules it out.")
     @ApiResponse(responseCode = "200", description = "The trip")
     @ApiResponse(responseCode = "404", description = "not_found: no such trip, or not one the caller can see",
             content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemDetail.class)))
@@ -161,7 +163,8 @@ public class TripController {
     @ApiResponse(responseCode = "404", description = "not_found: no such trip, or not one the caller can see",
             content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemDetail.class)))
     @ApiResponse(responseCode = "409", description = "own_trip, join_request_exists, trip_full, trip_closed or "
-            + "too_many_pending_requests",
+            + "too_many_pending_requests, or deal_breaker_conflict when a deal-breaker on either side rules the trip "
+            + "out",
             content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemDetail.class)))
     public JoinRequestCreatedResponse requestToJoin(@Parameter(hidden = true) @AuthenticationPrincipal Jwt token,
                                                     @PathVariable UUID tripId) {

@@ -57,6 +57,8 @@ public class JoinRequestService {
 
     private final TripQueries queries;
 
+    private final MatchService matches;
+
     private final RateLimiter rateLimiter;
 
     private final TripProperties properties;
@@ -68,12 +70,14 @@ public class JoinRequestService {
     private final Clock clock;
 
     public JoinRequestService(AccountService accounts, TripRepository trips, TripMemberRepository members,
-                              TripQueries queries, RateLimiter rateLimiter, TripProperties properties,
-                              PlatformTransactionManager transactionManager, Clock clock) {
+                              TripQueries queries, MatchService matches, RateLimiter rateLimiter,
+                              TripProperties properties, PlatformTransactionManager transactionManager,
+                              Clock clock) {
         this.accounts = accounts;
         this.trips = trips;
         this.members = members;
         this.queries = queries;
+        this.matches = matches;
         this.rateLimiter = rateLimiter;
         this.properties = properties;
         this.transactions = new TransactionTemplate(transactionManager);
@@ -85,7 +89,9 @@ public class JoinRequestService {
     /**
      * Asks to join a trip. Counted and checked under the caller's user row
      * lock, so two requests sent together cannot both pass the pending cap or
-     * both find no earlier request.
+     * both find no earlier request. A trip a deal-breaker on either side
+     * rules out is refused, so a host's limits hold even for someone who
+     * reaches the trip through a link rather than browse.
      */
     public TripMember request(SessionPrincipal caller, UUID tripId) {
         rateLimiter.consume(REQUEST_BUCKET, caller.userId().toString(), properties.joinRequestLimit());
@@ -103,6 +109,9 @@ public class JoinRequestService {
                 throw notFound();
             }
             requireTakingCompanions(trip, TripCalendar.today(clock));
+            if (!matches.dealBreakersAllow(userId, tripId)) {
+                throw new ApiProblemException(TripProblem.DEAL_BREAKER_CONFLICT);
+            }
             if (members.countByUserAndStatus(userId, MemberStatus.REQUESTED) >= properties.maxPendingRequests()) {
                 throw new ApiProblemException(TripProblem.TOO_MANY_PENDING_REQUESTS);
             }
