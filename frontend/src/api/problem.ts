@@ -66,6 +66,17 @@ const SERVER_WORDED_CODES: ReadonlySet<string> = new Set([
   'invalid_quiz_answer',
   'quiz_incomplete',
   'vibe_profile_missing',
+  'invalid_trip_dates',
+  'invalid_location_filter',
+  'invalid_date_filter',
+  'too_many_trips',
+  'own_trip',
+  'join_request_exists',
+  'too_many_pending_requests',
+  'trip_full',
+  'trip_closed',
+  'join_request_decided',
+  'trip_busy',
 ]);
 
 /**
