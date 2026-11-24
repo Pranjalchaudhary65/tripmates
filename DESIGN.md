@@ -111,11 +111,11 @@ dependencies.
 
 | Module | Owns tables | Depends on |
 |---|---|---|
-| `identity` | users, user_encryption_keys, identity_verifications, vouches, otp_codes, totp_backup_codes, refresh_token_families, login_history; publishes the read-only view user_public_facts for other modules' SQL | — (foundation) |
+| `identity` | users, user_encryption_keys, identity_verifications, vouches, otp_codes, totp_backup_codes, refresh_token_families, login_history, emergency_contacts; publishes the read-only view user_public_facts for other modules' SQL | — (foundation) |
 | `vibe` | vibe_profiles, deal_breakers, vibe_quiz_drafts; publishes the read-only view deal_breaker_facts for matching | identity |
-| `trips` | trips, trip_members, match_score_cache; publishes the read-only view trip_facts for other modules' SQL | identity, vibe |
+| `trips` | trips, trip_members, match_score_cache; publishes the read-only views trip_facts and trip_member_facts for other modules' SQL | identity, vibe |
 | `chat` | conversations, chat_messages, moderation_flags | identity, trips |
-| `meetup` | meetups, meetup_checkins, meetup_feedback, verified_venues | identity, trips |
+| `meetup` | meetups, meetup_checkins, meetup_feedback, verified_venues, video_call_confirmations | identity, trips |
 | `settlement` | ledger_entries, settlements, settlement_state_transitions, expenses, expense_shares | identity, trips |
 | `safety` | itinerary_shares, checkins, sos_events | identity, trips |
 | `trust` | reviews, trust_score_events, trust_score_snapshots | identity, trips, settlement, safety |
@@ -1257,6 +1257,65 @@ Trip lock gate (service-layer rule, cross-referencing `trip_members`,
 `LOCKED` only when the `meetups` row for `(trip_id, requester_user_id)` has
 `status = 'COMPLETED'` **and** no `meetup_feedback` row for that meetup has
 `comfort_rating` below the threshold.
+
+**As built (meet-up).** What the meet-up module added or settled (`V14`-`V16`):
+
+- **A match is the accepted join request.** Every route is
+  `/matches/{matchId}/...` where `matchId` is the `trip_members` row's ID;
+  only its host and companion reach it (404 for anyone else). Trips exposes
+  `TripMembership` (no endpoint) to read a match under its row lock, record
+  the video call, lock, and release for safety; meet-up decides and calls it,
+  so the gate lives in meet-up while trips still owns the rows. Lock and
+  release publish `CompanionLocked` / `CompanionReleased`; chat listens and
+  unlocks contact details or closes the conversation with a SYSTEM message.
+  `trip_member_facts` (`V15`) lets chat link a conversation to its match.
+- **Gate as built.** The trip locks when the meet-up completed and *both*
+  ratings are in and at or above 3; a rating below 3 releases at once.
+  Waiting for both gives each person the chance to decline. Every change to
+  a match runs under its `trip_members` row lock, so two people rating at
+  the same moment lock the trip exactly once (tested).
+- **Silent stop.** A rating below 3, or a meet-up cancelled with type
+  `SAFETY`, releases the companion: `trip_members` becomes `CANCELLED` /
+  `SAFETY`, the slot is freed (a `FULL` trip reopens), the chat closes.
+  Both people's match screen then shows only `DID_NOT_PROCEED`, the trip and
+  the other's first name: no meet-up, no reason, no hint of who decided.
+- **Safety is free by construction.** `MeetupTrustEvents` has exactly two
+  methods, `noShow` and `lateConvenienceCancel`, both taking only IDs; there
+  is no method that could carry a rating or a safety cancellation, and a
+  test pins that list. `CONVENIENCE` cancellations allow a new proposal, so
+  `UNIQUE (trip_id, requester_user_id)` became a partial unique index on
+  active meet-ups (`PROPOSED`, `CONFIRMED`) with history kept.
+- **Video call (mock).** `video_call_confirmations` holds each side's
+  confirmation; when both have, `trip_members.video_verified_at` is set.
+- **Emergency contact** lives in identity (`emergency_contacts`, `V14`): one
+  per user, name, relationship and an AES-GCM phone under the user's key,
+  shown back masked, and refused if it is the user's own verified number.
+  It is required to propose or confirm a meet-up. `itinerary_shares` (§7)
+  will reuse it rather than store a second copy.
+- **Venues.** `verified_venues` gained plain coordinates (point generated),
+  `city` and `time_zone`, seeded with 33 public places across the 15 cities
+  the place picker offers. Proposals copy name and coordinates onto the
+  meet-up; `venue_id` keeps the allowlist a foreign key.
+- **Daylight** is computed, not assumed: sunrise and sunset at the venue's
+  coordinates (NOAA equations), a start at least 1 h after sunrise and 2 h
+  before sunset so the meet-up also ends in daylight, at least 3 h ahead,
+  at most 30 days ahead, on a local day before the trip starts, on a
+  15-minute grid. The venue list carries each venue's windows for 14 days.
+- **Check-in** needs both signals at once (`ck_meetup_checkins_arrival`):
+  a point within 100 m of the venue measured in PostGIS
+  (`ck_meetup_checkins_geofence` holds the database to 100 m) and a selfie
+  through the EXIF-stripping pipeline. A refused check-in stores nothing.
+  Rows are created for both people at confirmation so the safety job can see
+  who has not arrived. The other person sees only "arrived", never a point.
+  Selfies are purged after 7 days.
+- **Safety job.** Every minute, per confirmed meet-up under
+  `FOR UPDATE SKIP LOCKED`: 30 min after the start, an email to anyone
+  neither checked in nor "safe"; 60 min, their emergency contact is alerted
+  (pluggable `EmergencyAlertSender`; the demo `mailbox` sender delivers the
+  alert text to the user's own inbox with the contact's number masked);
+  90 min, a meet-up not completed becomes `NO_SHOW` and each person who did
+  not arrive is a trust input. The other person is never told.
+- **Comfort notes** are optional and sealed under their author's key.
 
 ### 6. Settlement & Ledger (obligations, not custody)
 
