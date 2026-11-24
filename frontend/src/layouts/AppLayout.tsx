@@ -53,6 +53,12 @@ function SessionNav() {
 
   return (
     <>
+      <NavLink to="/trips" end className={navLinkClassName}>
+        Trips
+      </NavLink>
+      <NavLink to="/trips/requests" className={navLinkClassName}>
+        Requests
+      </NavLink>
       <NavLink to="/vibe" end className={navLinkClassName}>
         My vibe
       </NavLink>

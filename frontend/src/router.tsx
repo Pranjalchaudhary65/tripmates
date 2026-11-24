@@ -4,6 +4,8 @@ import { AppLayout } from './layouts/AppLayout';
 import { AdminUserLookupPage } from './pages/AdminUserLookupPage';
 import { AdminVerificationQueuePage } from './pages/AdminVerificationQueuePage';
 import { HomePage } from './pages/HomePage';
+import { HostedTripsPage } from './pages/HostedTripsPage';
+import { JoinRequestsPage } from './pages/JoinRequestsPage';
 import { LoginPage } from './pages/LoginPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { RouteErrorPage } from './pages/RouteErrorPage';
@@ -11,6 +13,9 @@ import { SecondFactorPage } from './pages/SecondFactorPage';
 import { SecurityPage } from './pages/SecurityPage';
 import { SessionsPage } from './pages/SessionsPage';
 import { SignupPage } from './pages/SignupPage';
+import { TripBrowsePage } from './pages/TripBrowsePage';
+import { TripCreatePage } from './pages/TripCreatePage';
+import { TripDetailPage } from './pages/TripDetailPage';
 import { VerificationPage } from './pages/VerificationPage';
 import { VibeProfilePage } from './pages/VibeProfilePage';
 import { VibeQuizPage } from './pages/VibeQuizPage';
@@ -19,7 +24,8 @@ import { VouchPage } from './pages/VouchPage';
 
 /**
  * Public: home and the not-found page. Signed-out only: sign-up, email
- * verification and both login steps. Signed-in only: account screens.
+ * verification and both login steps. Signed-in only: account screens and
+ * trips (no tier needed: verification is rewarded, never demanded).
  * Tier-gated: vouching needs the selfie tier. Admin: signed in, role ADMIN
  * and a second factor in this session.
  */
@@ -47,6 +53,11 @@ export const routes: RouteObject[] = [
           { path: 'account/verification', element: <VerificationPage /> },
           { path: 'vibe', element: <VibeProfilePage /> },
           { path: 'vibe/quiz', element: <VibeQuizPage /> },
+          { path: 'trips', element: <TripBrowsePage /> },
+          { path: 'trips/new', element: <TripCreatePage /> },
+          { path: 'trips/mine', element: <HostedTripsPage /> },
+          { path: 'trips/requests', element: <JoinRequestsPage /> },
+          { path: 'trips/:tripId', element: <TripDetailPage /> },
           {
             element: <RequireTier minimum="SELFIE_MATCH" />,
             children: [{ path: 'account/vouches', element: <VouchPage /> }],
