@@ -17,7 +17,14 @@ export function TripCard({ trip }: { trip: TripSummary }) {
         <Link to={`/trips/${trip.id}`} className="text-lg font-semibold text-teal-800 underline">
           {trip.title}
         </Link>
-        <span className="text-sm text-slate-600">{TRIP_STATUS_LABELS[trip.status]}</span>
+        <span className="text-sm text-slate-600">
+          {trip.matchScore !== null && (
+            <span className="mr-2 rounded bg-teal-50 px-2 py-0.5 font-semibold text-teal-800">
+              {trip.matchScore}% match
+            </span>
+          )}
+          {TRIP_STATUS_LABELS[trip.status]}
+        </span>
       </div>
       <p className="mt-1 text-sm text-slate-700">
         {trip.destinationName}

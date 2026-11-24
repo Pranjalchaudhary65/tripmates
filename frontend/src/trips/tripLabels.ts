@@ -1,5 +1,5 @@
 import type { VerificationTier } from '../api/accessGrant';
-import type { MemberStatus, TripStatus } from '../api/tripsApi';
+import type { MatchDimension, MemberStatus, TripStatus } from '../api/tripsApi';
 
 /** Words for trip and request codes; the server only ever sends the codes. */
 
@@ -58,3 +58,15 @@ export function placesLeft(totalSlots: number, filledSlots: number): string {
   }
   return left === 1 ? '1 place left' : `${String(left)} places left`;
 }
+
+/** Short names for the dimensions a match reason is about, shown beside the server's sentence. */
+export const MATCH_DIMENSION_LABELS: Record<MatchDimension, string> = {
+  BUDGET: 'Budget',
+  PACE: 'Pace',
+  WAKE_TIME: 'Mornings',
+  PLANNING: 'Planning',
+  SOCIAL_ENERGY: 'Social energy',
+  RISK_APPETITE: 'Risk',
+  FOOD: 'Food',
+  EXPENSES: 'Shared costs',
+};

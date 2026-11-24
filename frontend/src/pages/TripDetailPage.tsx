@@ -4,6 +4,7 @@ import { isRecord } from '../api/accessGrant';
 import { toApiFailure, type ApiFailure } from '../api/problem';
 import { tripsApi, type TripDetail, type TripSummary } from '../api/tripsApi';
 import { ErrorNotice } from '../components/ErrorNotice';
+import { MatchBreakdown } from '../components/MatchBreakdown';
 import { useApiResource } from '../hooks/useApiResource';
 import { useSubmission } from '../hooks/useSubmission';
 import {
@@ -17,7 +18,8 @@ import { isUuid } from '../trips/ids';
 import { BUDGET_LABELS } from '../vibe/vibeLabels';
 
 /**
- * One trip, in one call. Someone else's open trip offers "Ask to join"; the
+ * One trip, in one call, with how well the caller matches it. Someone
+ * else's open trip offers "Ask to join", unless a deal-breaker rules it out; the
  * host sees how many requests wait and goes to the inbox to answer them. An
  * ID that is not a UUID is never sent: it gets the same "not available"
  * screen the server's 404 gets, whether the trip does not exist or the
@@ -103,6 +105,12 @@ function TripView({
       </dl>
       <p className="mt-6 whitespace-pre-line text-slate-800">{detail.description}</p>
 
+      {detail.match !== null && (
+        <div className="mt-6">
+          <MatchBreakdown match={detail.match} />
+        </div>
+      )}
+
       <div className="mt-6">
         {trip.hostedByMe ? (
           <HostPanel trip={trip} />
@@ -113,7 +121,7 @@ function TripView({
               See all your requests
             </Link>
           </p>
-        ) : trip.status === 'OPEN' ? (
+        ) : detail.match?.status === 'BLOCKED' ? null : trip.status === 'OPEN' ? (
           <JoinButton tripId={trip.id} onJoined={onJoined} />
         ) : (
           <p className="text-sm text-slate-600">This trip is not taking requests.</p>
