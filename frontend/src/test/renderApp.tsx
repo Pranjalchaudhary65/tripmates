@@ -19,8 +19,12 @@ export function installSessionHandling(): void {
   );
 }
 
-export function renderAt(pathname: string, state?: unknown) {
-  const router = createMemoryRouter(routes, { initialEntries: [{ pathname, state }] });
+/** Opens the app at a path, which may carry a query string ("/trips?near=goa"). */
+export function renderAt(path: string, state?: unknown) {
+  const queryStart = path.indexOf('?');
+  const pathname = queryStart === -1 ? path : path.slice(0, queryStart);
+  const search = queryStart === -1 ? '' : path.slice(queryStart);
+  const router = createMemoryRouter(routes, { initialEntries: [{ pathname, search, state }] });
   render(<RouterProvider router={router} />);
   return router;
 }
