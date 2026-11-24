@@ -105,8 +105,8 @@ Deadline: 2026-11-30.
 - [x] Optimistic-lock slot claim + concurrency test (N concurrent joins, 1 slot, exactly 1 wins)
 
 ## Step 6b — Trips frontend: browse, create, join inbox
-- [ ] Trip browse screen with filters, trip create form
-- [ ] Join request inbox (host side: accept/reject; requester side: status)
+- [x] Trip browse screen with filters, trip create form
+- [x] Join request inbox (host side: accept/reject; requester side: status)
 
 ## Step 7a — Explainable matching backend
 - [ ] Hard filters (deal_breakers) then weighted soft score over vibe dimensions

@@ -184,3 +184,12 @@ One line per commit: what I built, and the key decision behind it.
   disagree. Read other travellers only through an identity-owned
   user_public_facts view, so no trips query can reach an email, phone or
   surname.
+- **Step 6b** — Built trip browse with filters, the trip create form, the
+  trip page with "Ask to join", my trips, and a join request inbox with both
+  sides (accept/reject on my trips, status of what I sent). Kept browse
+  filters in the URL instead of component state or storage, so a search
+  survives a reload and can be shared, and read them back against fixed lists
+  so a crafted link cannot push an unknown value to the API. Offered a short
+  list of destinations with their coordinates instead of a map widget, which
+  keeps the bundle free of a map library and still lets anyone type exact
+  coordinates. Refused to put any ID that is not a UUID into an API path.
