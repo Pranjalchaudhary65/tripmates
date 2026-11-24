@@ -177,7 +177,12 @@ class ChatSocketIntegrationTest {
         Socket companion = connected(pair.companion());
 
         for (int i = 0; i < 40 && companion.isConnected(); i++) {
-            companion.sendTyping(pair.conversationId());
+            try {
+                companion.sendTyping(pair.conversationId());
+            } catch (org.springframework.messaging.MessageDeliveryException closedMidLoop) {
+                // The server cut the socket off between the check and this send: the behaviour under test.
+                break;
+            }
         }
 
         assertThat(companion.nextError(StompTestClient.WAIT)).isEqualTo("Not allowed");
