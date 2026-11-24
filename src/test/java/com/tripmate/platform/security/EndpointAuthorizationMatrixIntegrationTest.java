@@ -15,6 +15,7 @@ import com.tripmate.support.MutableClock;
 import com.tripmate.support.ProblemScenarioController;
 import com.tripmate.support.TestAuthenticator;
 import com.tripmate.support.TestImages;
+import com.tripmate.trips.TripApi;
 import com.tripmate.vibe.VibeApi;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -61,6 +62,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  *       gets 401; another signed-in user gets 404, exactly as for an ID that
  *       does not exist (DESIGN.md, "Authorization tests"), and the owner's
  *       state is unchanged; the owner gets the success status.</li>
+ *   <li>{@link Access#LISTED}: a resource addressed by its own ID that every
+ *       signed-in user may reach while it is listed, such as an open trip.
+ *       Anonymous gets 401; another signed-in user gets the success status,
+ *       with nothing of the owner in the response; an ID that does not exist
+ *       gets 404, and once the resource is no longer listed another user gets
+ *       exactly that same 404.</li>
  *   <li>{@link Access#ADMIN}: anonymous gets 401; a signed-in user who is not
  *       an admin gets 403, as does a 2FA user who is not an admin and an admin
  *       whose session skipped the second factor; an admin signed in with a
@@ -131,6 +138,17 @@ class EndpointAuthorizationMatrixIntegrationTest {
             Route.self("PUT", "/api/v1/vibe/deal-breakers", Setup.SIGNED_IN, 200, actor -> """
                     {"smoking":"NO","drinking":"OK","genderPreference":"ANY","minTrustScore":20}"""),
 
+            Route.self("POST", "/api/v1/trips", Setup.SIGNED_IN, 201,
+                    actor -> TripApi.tripJson(TripApi.uniquePlace(), 2)),
+            Route.self("GET", "/api/v1/trips", Setup.SIGNED_IN, 200, Route.NO_BODY),
+            Route.self("GET", "/api/v1/trips/hosted", Setup.SIGNED_IN, 200, Route.NO_BODY),
+            Route.listed("GET", "/api/v1/trips/{tripId}", 200),
+            Route.listed("POST", "/api/v1/trips/{tripId}/join-requests", 201),
+            Route.self("GET", "/api/v1/join-requests/incoming", Setup.SIGNED_IN, 200, Route.NO_BODY),
+            Route.self("GET", "/api/v1/join-requests/outgoing", Setup.SIGNED_IN, 200, Route.NO_BODY),
+            Route.owned("POST", "/api/v1/join-requests/{requestId}/accept", Setup.HOSTING_REQUEST, "requestId", 200),
+            Route.owned("POST", "/api/v1/join-requests/{requestId}/reject", Setup.HOSTING_REQUEST, "requestId", 200),
+
             Route.admin("GET", "/api/v1/admin/users/{userId}", 200, Route.NO_BODY),
             Route.admin("GET", "/api/v1/admin/verifications", 200, Route.NO_BODY),
             Route.admin("POST", "/api/v1/admin/verifications/{verificationId}/decision", 200, actor -> """
@@ -177,6 +195,7 @@ class EndpointAuthorizationMatrixIntegrationTest {
             case PUBLIC -> checkPublic(route);
             case SELF -> checkSelf(route);
             case OWNED -> checkOwned(route);
+            case LISTED -> checkListed(route);
             case ADMIN -> checkAdmin(route);
         }
     }
@@ -265,6 +284,40 @@ class EndpointAuthorizationMatrixIntegrationTest {
 
         HttpResponse<String> asOwner = send(owner.http(), route, path, owner.accessToken(), route.body().apply(owner));
         assertThat(asOwner.statusCode()).as("%s as owner: %s", route, asOwner.body()).isEqualTo(route.ownerStatus());
+    }
+
+    /**
+     * A resource every signed-in user may reach while it is listed: another
+     * user gets the success status; an unknown ID, and the same resource once
+     * unlisted, get one identical 404.
+     */
+    private void checkListed(Route route) {
+        Actor owner = actor(route.setup());
+        String id = owner.extra(route.idVariable());
+        String path = expand(route.path(), Map.of(route.idVariable(), id));
+        assertRefusedAsAnonymous(route, path);
+
+        Actor other = actor(Setup.SIGNED_IN);
+        HttpResponse<String> asOther = send(other.http(), route, path, other.accessToken(), route.body().apply(other));
+        assertThat(asOther.statusCode()).as("%s as another user: %s", route, asOther.body())
+                .isEqualTo(route.ownerStatus());
+        assertThat(asOther.body()).as("%s as another user", route)
+                .doesNotContain(owner.userId(), owner.email(), owner.sessionId());
+
+        HttpResponse<String> unknown = send(other.http(), route,
+                expand(route.path(), Map.of(route.idVariable(), UUID.randomUUID().toString())),
+                other.accessToken(), route.body().apply(other));
+        assertThat(unknown.statusCode()).as("%s with an unknown ID", route).isEqualTo(404);
+
+        jdbc.update("update trips set status = 'CANCELLED' where id = ?::uuid", id);
+        Actor stranger = actor(Setup.SIGNED_IN);
+        HttpResponse<String> unlisted = send(stranger.http(), route, path, stranger.accessToken(),
+                route.body().apply(stranger));
+        assertThat(unlisted.statusCode()).as("%s once unlisted: %s", route, unlisted.body()).isEqualTo(404);
+        assertThat(JsonPath.<String>read(unlisted.body(), "$.code")).as("unlisted and unknown look the same")
+                .isEqualTo(JsonPath.read(unknown.body(), "$.code"));
+        assertThat(JsonPath.<String>read(unlisted.body(), "$.detail"))
+                .isEqualTo(JsonPath.read(unknown.body(), "$.detail"));
     }
 
     private void checkAdmin(Route route) {
@@ -384,6 +437,18 @@ class EndpointAuthorizationMatrixIntegrationTest {
                 HttpResponse<String> taken = new VibeApi(http).submit(token, VibeApi.FIRST_OPTIONS);
                 assertThat(taken.statusCode()).as(taken.body()).isEqualTo(200);
             }
+            case HOSTING, HOSTING_REQUEST -> {
+                String tripId = new TripApi(http).open(token, TripApi.tripJson(TripApi.uniquePlace(), 2));
+                extras.put("tripId", tripId);
+                if (setup == Setup.HOSTING_REQUEST) {
+                    LocalHttp requesterHttp = new LocalHttp(port);
+                    String requesterEmail = RegistrationApi.uniqueEmail();
+                    new RegistrationApi(requesterHttp, mailpit).registerVerified(requesterEmail);
+                    String requesterToken = new SessionApi(requesterHttp).signIn(requesterEmail, STRONG_PASSWORD)
+                            .accessToken();
+                    extras.put("requestId", new TripApi(requesterHttp).join(requesterToken, tripId));
+                }
+            }
             case CAN_VOUCH, VOUCHING -> {
                 verification.reachSelfieMatch(email, token);
                 LocalHttp friendHttp = new LocalHttp(port);
@@ -428,7 +493,8 @@ class EndpointAuthorizationMatrixIntegrationTest {
         String bearer = "Bearer " + owner.accessToken();
         List<String> bodies = new ArrayList<>();
         for (String path : List.of("/api/v1/users/me", "/api/v1/auth/2fa", "/api/v1/auth/sessions",
-                "/api/v1/verification", "/api/v1/vouches", "/api/v1/vibe/profile", "/api/v1/vibe/quiz")) {
+                "/api/v1/verification", "/api/v1/vouches", "/api/v1/vibe/profile", "/api/v1/vibe/quiz",
+                "/api/v1/trips/hosted", "/api/v1/join-requests/incoming", "/api/v1/join-requests/outgoing")) {
             HttpResponse<String> response = owner.http().get(path, "Authorization", bearer);
             assertThat(response.statusCode()).as("owner reading %s: %s", path, response.body()).isEqualTo(200);
             bodies.add(SIGNED_LINK.matcher(response.body()).replaceAll("\"profilePhoto\":{}"));
@@ -491,7 +557,7 @@ class EndpointAuthorizationMatrixIntegrationTest {
     }
 
     enum Access {
-        PUBLIC, SELF, OWNED, ADMIN
+        PUBLIC, SELF, OWNED, LISTED, ADMIN
     }
 
     /** The owner's account state the route's own request needs to be one that can succeed. */
@@ -508,7 +574,11 @@ class EndpointAuthorizationMatrixIntegrationTest {
         /** SELFIE_MATCH and vouching for another account; extras vouchTarget and vouchId. */
         VOUCHING,
         /** The vibe quiz finished, so there is a profile to adjust. */
-        VIBE_TAKEN
+        VIBE_TAKEN,
+        /** Hosting an open trip; extra tripId. */
+        HOSTING,
+        /** Hosting an open trip with a request from another account waiting on it; extras tripId and requestId. */
+        HOSTING_REQUEST
     }
 
     /**
@@ -516,7 +586,8 @@ class EndpointAuthorizationMatrixIntegrationTest {
      * @param ownerStatus what the owner (or, for ADMIN, an admin with otp) gets
      * @param body        the caller's request body for their own account: a
      *                    JSON string, a list of multipart parts, or null for none
-     * @param idVariable  OWNED only: the path variable naming the owner's resource, filled from the owner's extras
+     * @param idVariable  OWNED and LISTED only: the path variable naming the owner's resource, filled from the
+     *                    owner's extras
      */
     record Route(String method, String path, Access access, Setup setup, int ownerStatus,
                  Function<Actor, Object> body, String idVariable) {
@@ -533,6 +604,11 @@ class EndpointAuthorizationMatrixIntegrationTest {
 
         static Route owned(String method, String path, Setup setup, String idVariable, int ownerStatus) {
             return new Route(method, path, Access.OWNED, setup, ownerStatus, NO_BODY, idVariable);
+        }
+
+        /** A trip route: the owner hosts an open trip; another user's success status is given. */
+        static Route listed(String method, String path, int otherUserStatus) {
+            return new Route(method, path, Access.LISTED, Setup.HOSTING, otherUserStatus, NO_BODY, "tripId");
         }
 
         static Route admin(String method, String path, int ownerStatus, Function<Actor, Object> body) {
