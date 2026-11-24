@@ -2,6 +2,8 @@ package com.tripmate.trips.repository;
 
 import com.tripmate.trips.entity.MemberStatus;
 import com.tripmate.trips.entity.TripMember;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
 import org.springframework.data.repository.query.Param;
@@ -17,6 +19,11 @@ public interface TripMemberRepository extends Repository<TripMember, UUID> {
     Optional<TripMember> findById(UUID id);
 
     Optional<TripMember> findByTripIdAndUserId(UUID tripId, UUID userId);
+
+    /** Row-locked, for changes along the trust ladder after acceptance. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select m from TripMember m where m.id = :id")
+    Optional<TripMember> findByIdForUpdate(@Param("id") UUID id);
 
     /**
      * Served by idx_trip_members_user_status. Callers sending a request hold

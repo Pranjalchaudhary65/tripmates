@@ -18,10 +18,11 @@ import java.util.UUID;
  * trip_members). The host is not a member: a row here is always someone
  * asking to join, or who has joined, another person's trip.
  *
- * <p>Maps the columns the join request flow uses; video confirmation,
- * cancellation and lock columns stay unmapped until those steps of the trust
- * ladder exist. {@code version} makes an accept and a reject of the same
- * request, sent together, unable to both commit.
+ * <p>The rest of the trust ladder after acceptance is the meet-up module's to
+ * drive, through {@code TripMembership}: the video call confirmation, the
+ * lock once a public meet-up went well, and the safety release when it did
+ * not. {@code version} makes any two of those changes, sent together, unable
+ * to both commit.
  */
 @Entity
 @Table(name = "trip_members")
@@ -46,6 +47,16 @@ public class TripMember {
 
     @Column(name = "decided_at")
     private Instant decidedAt;
+
+    @Column(name = "video_verified_at")
+    private Instant videoVerifiedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "cancellation_type", length = 20)
+    private CancellationType cancellationType;
+
+    @Column(name = "locked_at")
+    private Instant lockedAt;
 
     @Version
     @Column(nullable = false)
@@ -81,6 +92,54 @@ public class TripMember {
         }
         status = outcome;
         decidedAt = now;
+    }
+
+    /** Both people confirmed their in-app video call. Repeating it keeps the first time. */
+    public void confirmVideoCall(Instant now) {
+        requireStatus(MemberStatus.ACCEPTED);
+        if (videoVerifiedAt == null) {
+            videoVerifiedAt = now;
+        }
+    }
+
+    /** The public meet-up went well for both: the companion is locked in. */
+    public void lock(Instant now) {
+        requireStatus(MemberStatus.ACCEPTED);
+        if (videoVerifiedAt == null) {
+            throw new IllegalStateException("Cannot lock before the video call");
+        }
+        status = MemberStatus.LOCKED;
+        lockedAt = now;
+    }
+
+    /**
+     * Someone stepped back for their safety. Free by construction: this is the
+     * only path to a SAFETY cancellation, and it records nothing else.
+     */
+    public void releaseForSafety() {
+        if (status != MemberStatus.ACCEPTED && status != MemberStatus.LOCKED) {
+            throw new IllegalStateException("Only a companion with a place can be released");
+        }
+        status = MemberStatus.CANCELLED;
+        cancellationType = CancellationType.SAFETY;
+    }
+
+    private void requireStatus(MemberStatus expected) {
+        if (status != expected) {
+            throw new IllegalStateException("Expected " + expected + " but was " + status);
+        }
+    }
+
+    public Instant getVideoVerifiedAt() {
+        return videoVerifiedAt;
+    }
+
+    public CancellationType getCancellationType() {
+        return cancellationType;
+    }
+
+    public Instant getLockedAt() {
+        return lockedAt;
     }
 
     public UUID getId() {

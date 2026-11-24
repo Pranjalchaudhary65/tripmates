@@ -140,6 +140,22 @@ public class Trip {
         updatedAt = now;
     }
 
+    /**
+     * Gives a slot back when a companion leaves. A full trip opens again; a
+     * trip in any other state keeps it, so a locked or finished trip is never
+     * reopened by a release.
+     */
+    public void releaseSlot(Instant now) {
+        if (filledSlots <= 0) {
+            throw new IllegalStateException("Trip has no filled slot to release");
+        }
+        filledSlots--;
+        if (status == TripStatus.FULL) {
+            status = TripStatus.OPEN;
+        }
+        updatedAt = now;
+    }
+
     public UUID getId() {
         return id;
     }
