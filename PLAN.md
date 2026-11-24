@@ -125,8 +125,8 @@ Deadline: 2026-11-30.
 - [x] Progressive disclosure: contact unlock endpoint gated on trip lock
 
 ## Step 8b — Chat frontend
-- [ ] Masked chat UI (WebSocket client), icebreaker suggestion chips
-- [ ] Contact-unlock banner once trip is locked
+- [x] Masked chat UI (WebSocket client), icebreaker suggestion chips
+- [x] Contact-unlock banner once trip is locked
 
 ## Step 8c — Public meet-up backend
 - [ ] verified_venues (admin-seeded allowlist), meetups, meetup_checkins, meetup_feedback tables

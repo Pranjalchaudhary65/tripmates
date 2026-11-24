@@ -221,3 +221,10 @@ One line per commit: what I built, and the key decision behind it.
   their own user queue rather than per-conversation topics, so the server
   alone decides who receives a message; and made icebreakers suggestions,
   never messages, so nothing generated is ever attributed to a person.
+- **Step 8b** — Built the chat screens (inbox with live unread counts,
+  conversation with history, typing, read markers, icebreaker chips and the
+  contact panel) and one socket that stays open while signed in. Chose to
+  write a small strict STOMP client over pulling in a library, since the
+  app uses four frame types and owning the parser lets it drop anything
+  malformed; chose to send messages optimistically with a client ID that a
+  retry reuses, so a flaky network can never post a message twice.
