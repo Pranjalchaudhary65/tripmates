@@ -1,6 +1,7 @@
 package com.tripmate.platform.security;
 
 import com.jayway.jsonpath.JsonPath;
+import com.tripmate.chat.ChatApi;
 import com.tripmate.identity.LoginApi;
 import com.tripmate.identity.RegistrationApi;
 import com.tripmate.identity.SessionApi;
@@ -148,6 +149,21 @@ class EndpointAuthorizationMatrixIntegrationTest {
             Route.self("GET", "/api/v1/join-requests/outgoing", Setup.SIGNED_IN, 200, Route.NO_BODY),
             Route.owned("POST", "/api/v1/join-requests/{requestId}/accept", Setup.HOSTING_REQUEST, "requestId", 200),
             Route.owned("POST", "/api/v1/join-requests/{requestId}/reject", Setup.HOSTING_REQUEST, "requestId", 200),
+
+            Route.self("GET", "/api/v1/conversations", Setup.SIGNED_IN, 200, Route.NO_BODY),
+            Route.owned("GET", "/api/v1/conversations/{conversationId}", Setup.IN_CONVERSATION, "conversationId",
+                    200),
+            Route.owned("GET", "/api/v1/conversations/{conversationId}/messages", Setup.IN_CONVERSATION,
+                    "conversationId", 200),
+            Route.owned("POST", "/api/v1/conversations/{conversationId}/messages", Setup.IN_CONVERSATION,
+                    "conversationId", 201, actor -> ChatApi.messageJson(UUID.randomUUID(), "Hello there")),
+            Route.owned("POST", "/api/v1/conversations/{conversationId}/read", Setup.IN_CONVERSATION,
+                    "conversationId", 204, actor -> """
+                            {"upToSeq":0}"""),
+            Route.owned("GET", "/api/v1/conversations/{conversationId}/icebreakers", Setup.IN_CONVERSATION,
+                    "conversationId", 200),
+            Route.owned("GET", "/api/v1/conversations/{conversationId}/contact", Setup.CONTACT_UNLOCKED,
+                    "conversationId", 200),
 
             Route.admin("GET", "/api/v1/admin/users/{userId}", 200, Route.NO_BODY),
             Route.admin("GET", "/api/v1/admin/verifications", 200, Route.NO_BODY),
@@ -437,16 +453,26 @@ class EndpointAuthorizationMatrixIntegrationTest {
                 HttpResponse<String> taken = new VibeApi(http).submit(token, VibeApi.FIRST_OPTIONS);
                 assertThat(taken.statusCode()).as(taken.body()).isEqualTo(200);
             }
-            case HOSTING, HOSTING_REQUEST -> {
+            case HOSTING, HOSTING_REQUEST, IN_CONVERSATION, CONTACT_UNLOCKED -> {
                 String tripId = new TripApi(http).open(token, TripApi.tripJson(TripApi.uniquePlace(), 2));
                 extras.put("tripId", tripId);
-                if (setup == Setup.HOSTING_REQUEST) {
+                if (setup != Setup.HOSTING) {
                     LocalHttp requesterHttp = new LocalHttp(port);
                     String requesterEmail = RegistrationApi.uniqueEmail();
                     new RegistrationApi(requesterHttp, mailpit).registerVerified(requesterEmail);
                     String requesterToken = new SessionApi(requesterHttp).signIn(requesterEmail, STRONG_PASSWORD)
                             .accessToken();
                     extras.put("requestId", new TripApi(requesterHttp).join(requesterToken, tripId));
+                }
+                if (setup == Setup.IN_CONVERSATION || setup == Setup.CONTACT_UNLOCKED) {
+                    HttpResponse<String> accepted = new TripApi(http).accept(token, extras.get("requestId"));
+                    assertThat(accepted.statusCode()).as(accepted.body()).isEqualTo(200);
+                    String conversationId = new ChatApi(http).onlyConversationId(token);
+                    extras.put("conversationId", conversationId);
+                    if (setup == Setup.CONTACT_UNLOCKED) {
+                        jdbc.update("update conversations set contact_unlocked_at = now() where id = ?::uuid",
+                                conversationId);
+                    }
                 }
             }
             case CAN_VOUCH, VOUCHING -> {
@@ -494,7 +520,8 @@ class EndpointAuthorizationMatrixIntegrationTest {
         List<String> bodies = new ArrayList<>();
         for (String path : List.of("/api/v1/users/me", "/api/v1/auth/2fa", "/api/v1/auth/sessions",
                 "/api/v1/verification", "/api/v1/vouches", "/api/v1/vibe/profile", "/api/v1/vibe/quiz",
-                "/api/v1/trips/hosted", "/api/v1/join-requests/incoming", "/api/v1/join-requests/outgoing")) {
+                "/api/v1/trips/hosted", "/api/v1/join-requests/incoming", "/api/v1/join-requests/outgoing",
+                "/api/v1/conversations")) {
             HttpResponse<String> response = owner.http().get(path, "Authorization", bearer);
             assertThat(response.statusCode()).as("owner reading %s: %s", path, response.body()).isEqualTo(200);
             bodies.add(SIGNED_LINK.matcher(response.body()).replaceAll("\"profilePhoto\":{}"));
@@ -578,7 +605,11 @@ class EndpointAuthorizationMatrixIntegrationTest {
         /** Hosting an open trip; extra tripId. */
         HOSTING,
         /** Hosting an open trip with a request from another account waiting on it; extras tripId and requestId. */
-        HOSTING_REQUEST
+        HOSTING_REQUEST,
+        /** Hosting a trip whose request from another account was accepted; extras tripId, requestId, conversationId. */
+        IN_CONVERSATION,
+        /** In a conversation whose trip has locked, so contact details are unlocked; extras as IN_CONVERSATION. */
+        CONTACT_UNLOCKED
     }
 
     /**
@@ -604,6 +635,11 @@ class EndpointAuthorizationMatrixIntegrationTest {
 
         static Route owned(String method, String path, Setup setup, String idVariable, int ownerStatus) {
             return new Route(method, path, Access.OWNED, setup, ownerStatus, NO_BODY, idVariable);
+        }
+
+        static Route owned(String method, String path, Setup setup, String idVariable, int ownerStatus,
+                           Function<Actor, Object> body) {
+            return new Route(method, path, Access.OWNED, setup, ownerStatus, body, idVariable);
         }
 
         /** A trip route: the owner hosts an open trip; another user's success status is given. */

@@ -73,6 +73,16 @@ tripmate:
       capacity: 50
       period: 24h
 
+  chat:
+    # Low enough that a test reaches it in a handful of sends.
+    send-limit:
+      capacity: 20
+      period: 1h
+    socket:
+      # Tests run the sweep themselves; a background run could close a socket
+      # another test is still using.
+      sweep-interval: 1000d
+
   storage:
     # Under target/, so a test run never writes into the real uploads/.
     local-root: target/test-uploads
