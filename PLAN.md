@@ -129,13 +129,13 @@ Deadline: 2026-11-30.
 - [x] Contact-unlock banner once trip is locked
 
 ## Step 8c — Public meet-up backend
-- [ ] verified_venues (admin-seeded allowlist), meetups, meetup_checkins, meetup_feedback tables
-- [ ] trip_members.video_verified_at mock confirmation step, gates meetup proposal
-- [ ] Propose/confirm meetup (venue must come from allowlist, daylight-hours validation)
-- [ ] Geofenced + selfie check-in (ST_DWithin 100m + EXIF-stripped selfie upload)
-- [ ] Private comfort-rating feedback (never exposed to counterparty or trust score)
-- [ ] 30/60-minute missed-arrival ping scheduler -> emergency contact escalation
-- [ ] Trip lock gate: trip_members.status -> LOCKED only once meetup COMPLETED and no below-threshold rating
+- [x] verified_venues (admin-seeded allowlist), meetups, meetup_checkins, meetup_feedback tables
+- [x] trip_members.video_verified_at mock confirmation step, gates meetup proposal
+- [x] Propose/confirm meetup (venue must come from allowlist, daylight-hours validation)
+- [x] Geofenced + selfie check-in (ST_DWithin 100m + EXIF-stripped selfie upload)
+- [x] Private comfort-rating feedback (never exposed to counterparty or trust score)
+- [x] 30/60-minute missed-arrival ping scheduler -> emergency contact escalation
+- [x] Trip lock gate: trip_members.status -> LOCKED only once meetup COMPLETED and no below-threshold rating
 
 ## Step 8d — Public meet-up frontend
 - [ ] Meetup proposal/scheduling screen (venue picker from allowlist, time picker constrained to daylight hours)

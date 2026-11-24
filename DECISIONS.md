@@ -228,3 +228,12 @@ One line per commit: what I built, and the key decision behind it.
   app uses four frame types and owning the parser lets it drop anything
   malformed; chose to send messages optimistically with a client ID that a
   retry reuses, so a flaky network can never post a message twice.
+- **Step 8c** — Built the public meet-up: mock video call, daylight-only
+  proposals at allowlisted venues, geofenced selfie check-in, the 30/60
+  minute safety job with emergency contact alerts, and the private comfort
+  rating that locks the trip or quietly stops the match. Chose to put the
+  lock gate in the meet-up module and have trips expose a narrow
+  membership service, over trips reading meet-up tables, so no module
+  depends on meet-up and the rating stays unreachable at compile time;
+  chose to compute daylight from the sun at the venue over a fixed 8-to-6
+  window, which would allow dusk meetings in winter in the north.
