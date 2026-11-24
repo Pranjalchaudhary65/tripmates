@@ -1,6 +1,8 @@
 import { createBrowserRouter, type RouteObject } from 'react-router';
 import { GuestOnly, RequireAdmin, RequireSession, RequireTier } from './auth/guards';
 import { AppLayout } from './layouts/AppLayout';
+import { ConversationPage } from './pages/ConversationPage';
+import { ConversationsPage } from './pages/ConversationsPage';
 import { AdminUserLookupPage } from './pages/AdminUserLookupPage';
 import { AdminVerificationQueuePage } from './pages/AdminVerificationQueuePage';
 import { HomePage } from './pages/HomePage';
@@ -24,8 +26,8 @@ import { VouchPage } from './pages/VouchPage';
 
 /**
  * Public: home and the not-found page. Signed-out only: sign-up, email
- * verification and both login steps. Signed-in only: account screens and
- * trips (no tier needed: verification is rewarded, never demanded).
+ * verification and both login steps. Signed-in only: account screens,
+ * trips and messages (no tier needed: verification is rewarded, never demanded).
  * Tier-gated: vouching needs the selfie tier. Admin: signed in, role ADMIN
  * and a second factor in this session.
  */
@@ -58,6 +60,8 @@ export const routes: RouteObject[] = [
           { path: 'trips/mine', element: <HostedTripsPage /> },
           { path: 'trips/requests', element: <JoinRequestsPage /> },
           { path: 'trips/:tripId', element: <TripDetailPage /> },
+          { path: 'messages', element: <ConversationsPage /> },
+          { path: 'messages/:conversationId', element: <ConversationPage /> },
           {
             element: <RequireTier minimum="SELFIE_MATCH" />,
             children: [{ path: 'account/vouches', element: <VouchPage /> }],
