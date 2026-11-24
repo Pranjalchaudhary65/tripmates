@@ -112,7 +112,8 @@ describe('messages inbox', () => {
     const ravi = screen.getByRole('link', { name: /Conversation with Ravi/ });
     expect(within(ravi).getByText('You: Hi Ravi')).toBeDefined();
     expect(ravi.textContent).toContain('your trip');
-    expect(screen.getByRole('link', { name: 'Messages, 2 unread' })).toBeDefined();
+    // The badge follows the unread seeding effect, which runs after the list paints.
+    expect(await screen.findByRole('link', { name: 'Messages, 2 unread' })).toBeDefined();
   });
 
   it('moves a conversation to the top when a message arrives', async () => {
