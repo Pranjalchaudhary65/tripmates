@@ -117,12 +117,12 @@ Deadline: 2026-11-30.
 - [x] Trip detail screen showing explainable match breakdown (% + matches/mismatches)
 
 ## Step 8a — Guided masked chat backend
-- [ ] conversations, chat_messages, moderation_flags tables
-- [ ] WebSocket/STOMP auth on CONNECT + per-SUBSCRIBE authorization
-- [ ] Message sanitization (java-html-sanitizer) + PII-redaction regex before persist
-- [ ] Rule-based icebreaker generator (AI adapter interface, rule-based default impl)
-- [ ] Moderation flags (off-platform push / money request / harassment) -> trust score penalty hook
-- [ ] Progressive disclosure: contact unlock endpoint gated on trip lock
+- [x] conversations, chat_messages, moderation_flags tables
+- [x] WebSocket/STOMP auth on CONNECT + per-SUBSCRIBE authorization
+- [x] Message sanitization (java-html-sanitizer) + PII-redaction regex before persist
+- [x] Rule-based icebreaker generator (AI adapter interface, rule-based default impl)
+- [x] Moderation flags (off-platform push / money request / harassment) -> trust score penalty hook
+- [x] Progressive disclosure: contact unlock endpoint gated on trip lock
 
 ## Step 8b — Chat frontend
 - [ ] Masked chat UI (WebSocket client), icebreaker suggestion chips

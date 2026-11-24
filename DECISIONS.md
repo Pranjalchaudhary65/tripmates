@@ -211,3 +211,13 @@ One line per commit: what I built, and the key decision behind it.
   (a score on a blocked match, blockers on a scored one) over rendering
   whichever half looked valid, and to drop the join button on a blocked
   match since the server would refuse it anyway.
+- **Step 8a** — Built the masked chat backend: a conversation opens when a
+  host accepts a companion, messages go over HTTP and are pushed over
+  STOMP to each person's own queue, and every body is stripped to plain
+  text, contact-redacted, then sealed under the sender's data key bound to
+  its conversation and message number. Chose per-conversation message
+  numbers under a row lock over timestamps, so ordering, history paging and
+  unread counts never tie or skip; chose to let clients subscribe only to
+  their own user queue rather than per-conversation topics, so the server
+  alone decides who receives a message; and made icebreakers suggestions,
+  never messages, so nothing generated is ever attributed to a person.
