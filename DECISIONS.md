@@ -174,3 +174,13 @@ One line per commit: what I built, and the key decision behind it.
   them back, and offered a reload when the server says the quiz changed.
   Grouped two questions per step, which keeps each step one dimension and
   each save small.
+- **Step 6a** — Built trips, radius browse on PostGIS, and the join request
+  flow with accept and reject. Guarded the slot claim with the trip row's
+  @Version and a bounded retry instead of locking the host's account, so the
+  concurrency test (8 parallel accepts at 1 slot, at the last slot of a
+  part-filled trip, and at 3 slots) proves the optimistic lock alone closes
+  the race. Stored plain latitude and longitude and let Postgres generate the
+  geography column, so the entity needs no spatial type and the two can never
+  disagree. Read other travellers only through an identity-owned
+  user_public_facts view, so no trips query can reach an email, phone or
+  surname.

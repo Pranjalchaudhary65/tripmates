@@ -99,10 +99,10 @@ Deadline: 2026-11-30.
 - [x] Deal-breakers section, profile edit screen
 
 ## Step 6a — Trips backend: create, browse, PostGIS, optimistic-lock join
-- [ ] trips, trip_members tables (PostGIS geography column + GIST index)
-- [ ] Create trip (host), browse trips (radius/date/budget filters)
-- [ ] Join request -> accept/reject flow
-- [ ] Optimistic-lock slot claim + concurrency test (N concurrent joins, 1 slot, exactly 1 wins)
+- [x] trips, trip_members tables (PostGIS geography column + GIST index)
+- [x] Create trip (host), browse trips (radius/date/budget filters)
+- [x] Join request -> accept/reject flow
+- [x] Optimistic-lock slot claim + concurrency test (N concurrent joins, 1 slot, exactly 1 wins)
 
 ## Step 6b — Trips frontend: browse, create, join inbox
 - [ ] Trip browse screen with filters, trip create form
