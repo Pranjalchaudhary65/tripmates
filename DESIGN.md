@@ -111,7 +111,7 @@ dependencies.
 
 | Module | Owns tables | Depends on |
 |---|---|---|
-| `identity` | users, user_encryption_keys, identity_verifications, vouches, otp_codes, totp_backup_codes, refresh_token_families, login_history | — (foundation) |
+| `identity` | users, user_encryption_keys, identity_verifications, vouches, otp_codes, totp_backup_codes, refresh_token_families, login_history; publishes the read-only view user_public_facts for other modules' SQL | — (foundation) |
 | `vibe` | vibe_profiles, deal_breakers | identity |
 | `trips` | trips, trip_members, match_score_cache | identity, vibe |
 | `chat` | conversations, chat_messages, moderation_flags | identity, trips |
@@ -912,6 +912,58 @@ and costs nothing, by construction — the service method that records a
 safety cancellation is physically incapable of calling the same code path
 that writes a `GHOST` `trust_score_events` row; that path only exists on
 the `CONVENIENCE` branch. See Trust Score Engine → Safety carve-out.
+
+**As built.** What the trips module added or settled while building it:
+
+- **Coordinates.** `trips` stores `destination_latitude` and
+  `destination_longitude` as plain numbers, and `destination_point` is a
+  `GENERATED ALWAYS ... STORED` geography computed from them. The two can
+  never disagree, the entity needs no spatial type, and the GIST index sits
+  on the generated column as above.
+- **More CHECKs.** Latitude/longitude ranges, a title of at least 3
+  characters, `destination_radius_km` 0-500, `filled_slots >= 0`, and two
+  that tie the status to the count: `OPEN` only with a slot left
+  (`ck_trips_open_has_room`), `FULL` only with none (`ck_trips_full_has_none`).
+- **`trip_members.version`** (optimistic lock on the request itself), so an
+  accept and a reject of the same request cannot both commit, and
+  `ck_trip_members_decided` (anything past `REQUESTED` has `decided_at`).
+- **The host is not a `trip_members` row.** A row is always someone asking
+  to join, or who has joined, another person's trip; `total_slots` counts
+  companions, not the host.
+- **`user_public_facts`**, a view identity publishes (`V8`): `user_id`,
+  first name, `gender`, `id_verification_tier`, `trust_score` and an
+  `active` flag. Trips (and matching) read other people only through it,
+  never `users` itself, so no email, phone, date of birth, surname or photo
+  key is reachable from a trips query. `gender` and `trust_score` are for
+  matching filters and are never returned to another user.
+- **Visibility.** A trip is visible to its host, to anyone with a request on
+  it, and, while it is `OPEN` or `FULL` and its host is active, to every
+  signed-in user. Anything else is the same 404 as an unknown ID.
+- **Rules**, all in IST (`AgePolicy.LEGAL_ZONE`): a trip starts between today
+  and 365 days ahead and lasts at most 60 days; a host has at most 10
+  listed trips not yet over; an account has at most 20 requests waiting at
+  once, counted under its user row lock; one request per person per trip,
+  ever, so a rejection is final; a trip that has started takes no requests
+  and no accepts (a waiting request can still be rejected). Browse lists
+  `OPEN` trips by other, active hosts that have not started, soonest first,
+  filtered by radius (`ST_DWithin`, at most 1000 km), dates and budget bands.
+- **Slot claim.** Accepting loads the trip, calls `Trip.claimSlot` (which
+  refuses a trip that is not `OPEN` or has no room) and commits; Hibernate's
+  `@Version` makes the write `... WHERE id = ? AND version = ?`, and
+  `ck_trips_filled_slots` is the database's last word on overfilling. A
+  claim that loses the version race is retried from a fresh read in a new
+  transaction, up to `slot-claim-attempts` (5) times, then answers
+  `409 trip_busy`; a retry that finds the trip full answers `trip_full`.
+  Each loss means another claim committed, so with N slots a claim loses at
+  most N times. No lock is taken on the host's account for this, so the
+  optimistic lock alone is what the concurrency test proves.
+- **Routes.** `POST /trips`, `GET /trips` (browse), `GET /trips/hosted`,
+  `GET /trips/{tripId}`, `POST /trips/{tripId}/join-requests`,
+  `GET /join-requests/incoming` (host side, optional `tripId` and `status`),
+  `GET /join-requests/outgoing`, `POST /join-requests/{requestId}/accept`
+  and `/reject`. A decision names the request alone; anyone but its trip's
+  host gets 404. No response carries another person's user ID: they are a
+  first name and a verification tier.
 
 ```sql
 match_score_cache
