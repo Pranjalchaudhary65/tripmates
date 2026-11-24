@@ -36,6 +36,8 @@ export interface ChatMessage {
 /** ConversationSummaryResponse. */
 export interface ConversationSummary {
   id: string;
+  /** The accepted join request this chat belongs to; the meet-up screens are addressed by it. */
+  matchId: string | null;
   trip: { id: string; title: string; destinationName: string; startDate: string; endDate: string; status: TripStatus };
   otherPerson: { firstName: string; verificationTier: VerificationTier };
   myRole: ChatRole;
@@ -207,6 +209,7 @@ function readSummary(raw: unknown): ConversationSummary {
   if (
     isRecord(raw) &&
     isNonEmptyString(raw['id']) &&
+    (raw['matchId'] === null || isNonEmptyString(raw['matchId'])) &&
     isRecord(raw['trip']) &&
     isRecord(raw['otherPerson']) &&
     typeof raw['canSend'] === 'boolean' &&
@@ -235,6 +238,7 @@ function readSummary(raw: unknown): ConversationSummary {
     ) {
       return {
         id: raw['id'],
+        matchId: raw['matchId'],
         trip: {
           id: trip['id'],
           title: trip['title'],
