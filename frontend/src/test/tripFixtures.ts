@@ -22,6 +22,7 @@ export function tripSummary(overrides: Record<string, unknown> = {}) {
     hostedByMe: false,
     myRequest: null,
     pendingRequests: null,
+    matchScore: null,
     ...overrides,
   };
 }
@@ -33,6 +34,7 @@ export function tripDetail(summary: Record<string, unknown> = {}, overrides: Rec
     description: 'Beach hopping, easy pace.\nHostel stays.',
     radiusKm: 25,
     createdAt: '2026-11-20T10:00:00Z',
+    match: null,
     ...overrides,
   };
 }
@@ -93,4 +95,34 @@ export function decision(status: string, trip: { status?: string; filledSlots?: 
     decidedAt: '2026-11-23T10:00:00Z',
     trip: { id: TRIP_ID, status: trip.status ?? 'OPEN', totalSlots: 3, filledSlots: trip.filledSlots ?? 2 },
   };
+}
+
+/** MatchResponse for a scored match. */
+export function scoredMatch(score = 82) {
+  return {
+    status: 'SCORED',
+    score,
+    matches: [
+      { dimension: 'BUDGET', label: "The trip's budget is mid-range, the same as yours." },
+      { dimension: 'WAKE_TIME', label: 'You are both early birds.' },
+    ],
+    mismatches: [{ dimension: 'PLANNING', label: 'You like a detailed itinerary; the host likes no fixed plan.' }],
+    blockers: [],
+  };
+}
+
+/** MatchResponse for a trip a deal-breaker rules out. */
+export function blockedMatch() {
+  return {
+    status: 'BLOCKED',
+    score: null,
+    matches: [],
+    mismatches: [],
+    blockers: [{ rule: 'HOST_GENDER_PREFERENCE', label: 'The host is travelling only with people of their own gender.' }],
+  };
+}
+
+/** MatchResponse when one side has no vibe profile. */
+export function unscoredMatch(status: 'NEEDS_YOUR_PROFILE' | 'HOST_HAS_NO_PROFILE') {
+  return { status, score: null, matches: [], mismatches: [], blockers: [] };
 }

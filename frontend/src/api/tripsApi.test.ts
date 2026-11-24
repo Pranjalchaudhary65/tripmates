@@ -2,14 +2,17 @@ import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
+  blockedMatch,
   decision,
   incomingRequest,
   outgoingRequest,
   pageOf,
   REQUEST_ID,
+  scoredMatch,
   TRIP_ID,
   tripDetail,
   tripSummary,
+  unscoredMatch,
 } from '../test/tripFixtures';
 import { createApiClient } from './createApiClient';
 import { createTripsApi } from './tripsApi';
@@ -141,6 +144,47 @@ describe('trips API', () => {
     await api.requestToJoin('../admin');
 
     expect(path).toBe('/api/v1/trips/..%2Fadmin/join-requests');
+  });
+
+  it('reads a scored match and a blocked one', async () => {
+    server.use(
+      http.get(`${BASE_URL}/trips/${TRIP_ID}`, () =>
+        HttpResponse.json(tripDetail({ matchScore: 82 }, { match: scoredMatch(82) })),
+      ),
+    );
+    const scored = await api.detail(TRIP_ID);
+    expect(scored.trip.matchScore).toBe(82);
+    expect(scored.match?.score).toBe(82);
+    expect(scored.match?.matches.map((reason) => reason.dimension)).toEqual(['BUDGET', 'WAKE_TIME']);
+
+    server.use(http.get(`${BASE_URL}/trips/${TRIP_ID}`, () => HttpResponse.json(tripDetail({}, { match: blockedMatch() }))));
+    const blocked = await api.detail(TRIP_ID);
+    expect(blocked.match?.status).toBe('BLOCKED');
+    expect(blocked.match?.score).toBeNull();
+    expect(blocked.match?.blockers[0]?.rule).toBe('HOST_GENDER_PREFERENCE');
+  });
+
+  it.each([
+    ['a score on a match that is not SCORED', { ...unscoredMatch('NEEDS_YOUR_PROFILE'), score: 40 }],
+    ['no score on a SCORED match', { ...scoredMatch(), score: null }],
+    ['a score above 100', scoredMatch(101)],
+    ['a fractional score', scoredMatch(50.5)],
+    ['blockers on a SCORED match', { ...scoredMatch(), blockers: blockedMatch().blockers }],
+    ['BLOCKED without a blocker', { ...blockedMatch(), blockers: [] }],
+    ['an unknown status', { ...scoredMatch(), status: 'GREAT' }],
+    ['an unknown dimension', { ...scoredMatch(), matches: [{ dimension: 'ASTROLOGY', label: 'Both Leos.' }] }],
+    ['an empty label', { ...scoredMatch(), mismatches: [{ dimension: 'PACE', label: '' }] }],
+    ['an unknown deal-breaker', { ...blockedMatch(), blockers: [{ rule: 'HEIGHT', label: 'Too tall.' }] }],
+  ])('refuses a match with %s', async (_case, match) => {
+    server.use(http.get(`${BASE_URL}/trips/${TRIP_ID}`, () => HttpResponse.json(tripDetail({}, { match }))));
+
+    await expect(api.detail(TRIP_ID)).rejects.toThrow();
+  });
+
+  it('refuses a match score outside 0-100 on a card', async () => {
+    server.use(http.get(`${BASE_URL}/trips/hosted`, () => HttpResponse.json(pageOf([tripSummary({ matchScore: -1 })]))));
+
+    await expect(api.hosted(0)).rejects.toThrow('Unexpected trip.');
   });
 
   it('refuses a page without its counts', async () => {
