@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { AccessGrant, AuthMethod, SessionUser, VerificationTier } from '../api/accessGrant';
-import type { SessionRefresher } from '../api/authRefresh';
+import type { RefreshOutcome, SessionRefresher } from '../api/authRefresh';
 import { identityApi, type LoginBody, type RegistrationBody } from '../api/identityApi';
 import { toApiFailure, type ApiFailure } from '../api/problem';
 
@@ -62,6 +62,12 @@ export interface AuthState {
   setSession: (grant: AccessGrant) => void;
   clearSession: (reason?: SignOutReason) => void;
   restoreSession: () => Promise<void>;
+  /**
+   * For callers outside Axios that need a live access token, such as the
+   * chat socket's CONNECT. Joins the refresh already in flight, if any, so
+   * the refresh token is never rotated twice at once.
+   */
+  refreshAccessToken: () => Promise<RefreshOutcome>;
   register: (body: RegistrationBody) => Promise<ActionResult>;
   verifyEmail: (code: string) => Promise<ActionResult>;
   resendVerification: () => Promise<ActionResult>;
@@ -148,6 +154,13 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     if (outcome.kind === 'unavailable') {
       set({ status: 'unavailable', startupRetryAfterSeconds: toApiFailure(outcome.error).retryAfterSeconds });
     }
+  },
+
+  refreshAccessToken: async () => {
+    if (sessionRefresher === null) {
+      throw new Error('provideSessionRefresher must be called before refreshAccessToken.');
+    }
+    return sessionRefresher.refresh();
   },
 
   register: async (body) => {

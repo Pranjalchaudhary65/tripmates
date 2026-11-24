@@ -1,6 +1,8 @@
 import { Link, NavLink, Outlet, useNavigate } from 'react-router';
 import { StartupGate } from '../auth/StartupGate';
+import { ChatConnectionManager } from '../components/ChatConnectionManager';
 import { useAuthStore } from '../stores/authStore';
+import { selectUnreadTotal, useChatStore } from '../stores/chatStore';
 
 const navLinkClassName = ({ isActive }: { isActive: boolean }) =>
   `rounded px-2 py-1 text-sm font-medium hover:bg-teal-600 ${isActive ? 'bg-teal-800' : ''}`;
@@ -8,6 +10,7 @@ const navLinkClassName = ({ isActive }: { isActive: boolean }) =>
 export function AppLayout() {
   return (
     <StartupGate>
+      <ChatConnectionManager />
       <div className="flex min-h-screen flex-col bg-slate-50 text-slate-900">
         <header className="bg-teal-700 text-white shadow">
           <nav className="mx-auto flex max-w-5xl items-center gap-2 px-4 py-3">
@@ -29,6 +32,7 @@ function SessionNav() {
   const status = useAuthStore((state) => state.status);
   const isAdmin = useAuthStore((state) => state.user?.role === 'ADMIN');
   const logout = useAuthStore((state) => state.logout);
+  const unread = useChatStore(selectUnreadTotal);
   const navigate = useNavigate();
 
   if (status !== 'signedIn') {
@@ -58,6 +62,16 @@ function SessionNav() {
       </NavLink>
       <NavLink to="/trips/requests" className={navLinkClassName}>
         Requests
+      </NavLink>
+      <NavLink
+        to="/messages"
+        className={navLinkClassName}
+        aria-label={unread > 0 ? `Messages, ${String(unread)} unread` : 'Messages'}
+      >
+        Messages
+        {unread > 0 && (
+          <span className="ml-1 rounded-full bg-white px-1.5 text-xs font-semibold text-teal-800">{unread}</span>
+        )}
       </NavLink>
       <NavLink to="/vibe" end className={navLinkClassName}>
         My vibe
