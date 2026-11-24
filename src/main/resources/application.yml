@@ -101,6 +101,30 @@ tripmate:
       capacity: 120
       period: 1h
 
+  trips:
+    # Every limit is per account. Opening trips and sending join requests are
+    # what a spammer would repeat; reads cover browse (a spatial query),
+    # trip pages and both inboxes together.
+    create-limit:
+      capacity: 10
+      period: 24h
+    join-request-limit:
+      capacity: 30
+      period: 24h
+    decision-limit:
+      capacity: 200
+      period: 1h
+    read-limit:
+      capacity: 600
+      period: 10m
+    # Listed trips one host may have that are not over yet.
+    max-current-trips: 10
+    # Join requests one account may have waiting for an answer.
+    max-pending-requests: 20
+    # Tries at an accept that keeps losing the trip's optimistic lock to
+    # other changes on the same trip before it answers trip_busy.
+    slot-claim-attempts: 5
+
   storage:
     # Where uploaded images are kept. Relative paths resolve against the
     # working directory; uploads/ is git-ignored and never served statically.

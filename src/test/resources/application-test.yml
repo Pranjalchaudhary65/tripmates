@@ -63,6 +63,16 @@ tripmate:
       signing-key: dGVzdC1vbmx5LWp3dC1zaWduaW5nLWtleS1jdXJyZW50
       previous-signing-key: dGVzdC1vbmx5LWp3dC1zaWduaW5nLWtleS1wcmV2aW91cw==
 
+  trips:
+    # Caps a test can reach in a handful of calls; the opening limit sits
+    # above the trip cap so the cap, not the rate limit, is what a test of
+    # the cap runs into.
+    max-current-trips: 5
+    max-pending-requests: 5
+    create-limit:
+      capacity: 50
+      period: 24h
+
   storage:
     # Under target/, so a test run never writes into the real uploads/.
     local-root: target/test-uploads
