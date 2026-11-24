@@ -78,6 +78,11 @@ const SERVER_WORDED_CODES: ReadonlySet<string> = new Set([
   'join_request_decided',
   'trip_busy',
   'deal_breaker_conflict',
+  'empty_message',
+  'message_too_long',
+  'conversation_closed',
+  'message_id_reused',
+  'contact_locked',
 ]);
 
 /**
