@@ -79,6 +79,9 @@ function SessionNav() {
       <NavLink to="/account/verification" className={navLinkClassName}>
         Verification
       </NavLink>
+      <NavLink to="/account/emergency-contact" className={navLinkClassName}>
+        Emergency contact
+      </NavLink>
       <NavLink to="/account/security" className={navLinkClassName}>
         Security
       </NavLink>

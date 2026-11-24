@@ -1,14 +1,17 @@
 import { createBrowserRouter, type RouteObject } from 'react-router';
 import { GuestOnly, RequireAdmin, RequireSession, RequireTier } from './auth/guards';
 import { AppLayout } from './layouts/AppLayout';
+import { CheckInPage } from './pages/CheckInPage';
 import { ConversationPage } from './pages/ConversationPage';
 import { ConversationsPage } from './pages/ConversationsPage';
 import { AdminUserLookupPage } from './pages/AdminUserLookupPage';
 import { AdminVerificationQueuePage } from './pages/AdminVerificationQueuePage';
+import { EmergencyContactPage } from './pages/EmergencyContactPage';
 import { HomePage } from './pages/HomePage';
 import { HostedTripsPage } from './pages/HostedTripsPage';
 import { JoinRequestsPage } from './pages/JoinRequestsPage';
 import { LoginPage } from './pages/LoginPage';
+import { MatchPage } from './pages/MatchPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { RouteErrorPage } from './pages/RouteErrorPage';
 import { SecondFactorPage } from './pages/SecondFactorPage';
@@ -62,6 +65,9 @@ export const routes: RouteObject[] = [
           { path: 'trips/:tripId', element: <TripDetailPage /> },
           { path: 'messages', element: <ConversationsPage /> },
           { path: 'messages/:conversationId', element: <ConversationPage /> },
+          { path: 'matches/:matchId', element: <MatchPage /> },
+          { path: 'matches/:matchId/check-in', element: <CheckInPage /> },
+          { path: 'account/emergency-contact', element: <EmergencyContactPage /> },
           {
             element: <RequireTier minimum="SELFIE_MATCH" />,
             children: [{ path: 'account/vouches', element: <VouchPage /> }],

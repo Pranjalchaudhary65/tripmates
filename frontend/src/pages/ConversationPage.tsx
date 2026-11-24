@@ -209,6 +209,11 @@ function ConversationView({ initial }: { initial: ConversationDetail }) {
           </Link>{' '}
           · {formatTripDates(summary.trip.startDate, summary.trip.endDate)}
         </p>
+        {summary.matchId !== null && isUuid(summary.matchId) && summary.canSend && (
+          <Link to={`/matches/${summary.matchId}`} className="mt-2 inline-block text-sm font-medium text-teal-700 underline">
+            Video call and public meet-up
+          </Link>
+        )}
         {notice !== null && (
           <p role="status" className="mt-2 text-xs text-slate-500">
             {notice}
