@@ -6,10 +6,42 @@ import type { Page } from './verificationApi';
 
 export const TRIP_STATUSES = ['DRAFT', 'OPEN', 'FULL', 'LOCKED', 'COMPLETED', 'CANCELLED'] as const;
 export const MEMBER_STATUSES = ['REQUESTED', 'ACCEPTED', 'REJECTED', 'LOCKED', 'CANCELLED', 'COMPLETED'] as const;
+export const MATCH_STATUSES = ['SCORED', 'BLOCKED', 'NEEDS_YOUR_PROFILE', 'HOST_HAS_NO_PROFILE'] as const;
+export const MATCH_DIMENSIONS = [
+  'BUDGET',
+  'PACE',
+  'WAKE_TIME',
+  'PLANNING',
+  'SOCIAL_ENERGY',
+  'RISK_APPETITE',
+  'FOOD',
+  'EXPENSES',
+] as const;
+export const DEAL_BREAKER_RULES = [
+  'SMOKING',
+  'DRINKING',
+  'MY_GENDER_PREFERENCE',
+  'HOST_GENDER_PREFERENCE',
+  'MY_TRUST_MINIMUM',
+  'HOST_TRUST_MINIMUM',
+] as const;
 const TIERS = ['NONE', 'EMAIL', 'PHONE', 'SELFIE_MATCH'] as const satisfies readonly VerificationTier[];
 
 export type TripStatus = (typeof TRIP_STATUSES)[number];
 export type MemberStatus = (typeof MEMBER_STATUSES)[number];
+export type MatchStatus = (typeof MATCH_STATUSES)[number];
+export type MatchDimension = (typeof MATCH_DIMENSIONS)[number];
+export type DealBreakerRule = (typeof DEAL_BREAKER_RULES)[number];
+
+/** MatchResponse: how well the caller fits a trip, and why. Every label is a fixed server sentence. */
+export interface Match {
+  status: MatchStatus;
+  /** 0-100; null unless SCORED. */
+  score: number | null;
+  matches: { dimension: MatchDimension; label: string }[];
+  mismatches: { dimension: MatchDimension; label: string }[];
+  blockers: { rule: DealBreakerRule; label: string }[];
+}
 
 /** Someone else on a trip: a first name and a tier, never an ID or contact. */
 export interface Person {
@@ -35,6 +67,8 @@ export interface TripSummary {
   hostedByMe: boolean;
   myRequest: { id: string; status: MemberStatus } | null;
   pendingRequests: number | null;
+  /** 0-100; null when it cannot be scored, or on the caller's own trip. */
+  matchScore: number | null;
 }
 
 /** TripDetailResponse. */
@@ -43,6 +77,8 @@ export interface TripDetail {
   description: string;
   radiusKm: number;
   createdAt: string;
+  /** Null on the caller's own trip. */
+  match: Match | null;
 }
 
 /** TripRefResponse: the trip a request is about. */
@@ -202,7 +238,8 @@ function readSummary(raw: unknown): TripSummary {
     isCount(raw['filledSlots']) &&
     typeof raw['hostedByMe'] === 'boolean' &&
     (raw['distanceKm'] === null || isFiniteNonNegative(raw['distanceKm'])) &&
-    (raw['pendingRequests'] === null || isCount(raw['pendingRequests']))
+    (raw['pendingRequests'] === null || isCount(raw['pendingRequests'])) &&
+    (raw['matchScore'] === null || isScore(raw['matchScore']))
   ) {
     const budgetBand = oneOf(BUDGET_BANDS, raw['budgetBand']);
     const status = oneOf(TRIP_STATUSES, raw['status']);
@@ -226,6 +263,7 @@ function readSummary(raw: unknown): TripSummary {
         hostedByMe: raw['hostedByMe'],
         myRequest,
         pendingRequests: raw['pendingRequests'],
+        matchScore: raw['matchScore'],
       };
     }
   }
@@ -244,9 +282,61 @@ function readDetail(raw: unknown): TripDetail {
       description: raw['description'],
       radiusKm: raw['radiusKm'],
       createdAt: raw['createdAt'],
+      match: raw['match'] === null ? null : readMatch(raw['match']),
     };
   }
   throw new Error('Unexpected trip detail.');
+}
+
+/**
+ * A match is only accepted in a shape that agrees with itself: a score
+ * exactly when SCORED, blockers exactly when BLOCKED. Anything else is a
+ * broken response, not something to render half of.
+ */
+function readMatch(raw: unknown): Match {
+  if (
+    isRecord(raw) &&
+    Array.isArray(raw['matches']) &&
+    Array.isArray(raw['mismatches']) &&
+    Array.isArray(raw['blockers'])
+  ) {
+    const status = oneOf(MATCH_STATUSES, raw['status']);
+    const score = raw['score'];
+    const blockers = raw['blockers'].map(readBlocker);
+    if (status !== null) {
+      const scoreFits = status === 'SCORED' ? isScore(score) : score === null;
+      if (scoreFits && (status === 'BLOCKED') === blockers.length > 0) {
+        return {
+          status,
+          score: isScore(score) ? score : null,
+          matches: raw['matches'].map(readReason),
+          mismatches: raw['mismatches'].map(readReason),
+          blockers,
+        };
+      }
+    }
+  }
+  throw new Error('Unexpected match.');
+}
+
+function readReason(raw: unknown): Match['matches'][number] {
+  if (isRecord(raw) && isNonEmptyString(raw['label'])) {
+    const dimension = oneOf(MATCH_DIMENSIONS, raw['dimension']);
+    if (dimension !== null) {
+      return { dimension, label: raw['label'] };
+    }
+  }
+  throw new Error('Unexpected match reason.');
+}
+
+function readBlocker(raw: unknown): Match['blockers'][number] {
+  if (isRecord(raw) && isNonEmptyString(raw['label'])) {
+    const rule = oneOf(DEAL_BREAKER_RULES, raw['rule']);
+    if (rule !== null) {
+      return { rule, label: raw['label'] };
+    }
+  }
+  throw new Error('Unexpected deal-breaker.');
 }
 
 function readPerson(raw: unknown): Person {
@@ -388,6 +478,10 @@ function readPage<T>(body: unknown, readItem: (raw: unknown) => T): Page<T> {
 
 function isCount(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+}
+
+function isScore(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 100;
 }
 
 function isFiniteNonNegative(value: unknown): value is number {

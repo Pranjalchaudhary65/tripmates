@@ -77,6 +77,7 @@ const SERVER_WORDED_CODES: ReadonlySet<string> = new Set([
   'trip_closed',
   'join_request_decided',
   'trip_busy',
+  'deal_breaker_conflict',
 ]);
 
 /**
