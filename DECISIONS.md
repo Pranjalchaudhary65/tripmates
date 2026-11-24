@@ -204,3 +204,10 @@ One line per commit: what I built, and the key decision behind it.
   races with a reader writing back a score from the old profile. Embedded
   the breakdown in the trip detail response instead of a separate endpoint,
   so the trip screen stays one call.
+- **Step 7b** — Built the match breakdown on the trip page (score with a
+  meter, what fits and what differs under each dimension, the deal-breaker
+  that rules a trip out, or a prompt to take the quiz) and the score on
+  browse cards. Chose to reject a match response that contradicts itself
+  (a score on a blocked match, blockers on a scored one) over rendering
+  whichever half looked valid, and to drop the join button on a blocked
+  match since the server would refuse it anyway.

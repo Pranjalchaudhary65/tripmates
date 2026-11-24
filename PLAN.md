@@ -114,7 +114,7 @@ Deadline: 2026-11-30.
 - [x] Explainability payload: matches[] / mismatches[] with human-readable labels
 
 ## Step 7b — Matching frontend: trip detail breakdown
-- [ ] Trip detail screen showing explainable match breakdown (% + matches/mismatches)
+- [x] Trip detail screen showing explainable match breakdown (% + matches/mismatches)
 
 ## Step 8a — Guided masked chat backend
 - [ ] conversations, chat_messages, moderation_flags tables
