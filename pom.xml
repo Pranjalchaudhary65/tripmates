@@ -33,6 +33,7 @@
 		<bucket4j.version>8.10.1</bucket4j.version>
 		<bouncycastle.version>1.78.1</bouncycastle.version>
 		<springdoc.version>3.2.0</springdoc.version>
+		<owasp-html-sanitizer.version>20240325.1</owasp-html-sanitizer.version>
 	</properties>
 	<dependencies>
 		<!-- Web -->
@@ -118,6 +119,13 @@
 			<groupId>com.bucket4j</groupId>
 			<artifactId>bucket4j-redis</artifactId>
 			<version>${bucket4j.version}</version>
+		</dependency>
+
+		<!-- Chat messages: strips markup with a real HTML lexer, not a regex -->
+		<dependency>
+			<groupId>com.googlecode.owasp-java-html-sanitizer</groupId>
+			<artifactId>owasp-java-html-sanitizer</artifactId>
+			<version>${owasp-html-sanitizer.version}</version>
 		</dependency>
 
 		<!-- DTO <-> entity mapping -->
