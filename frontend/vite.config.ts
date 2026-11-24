@@ -26,6 +26,8 @@ export default defineConfig(({ command, mode }) => {
     test: {
       environment: 'node',
       include: ['src/**/*.test.{ts,tsx}'],
+      // Replaces the chat socket's WebSocket with a fake, so no test opens a real one.
+      setupFiles: ['src/test/setup.ts'],
       restoreMocks: true,
       // A fixed, unroutable API origin for every test, so the shared client
       // can be imported without a developer's .env.local and MSW decides
