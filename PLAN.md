@@ -109,9 +109,9 @@ Deadline: 2026-11-30.
 - [x] Join request inbox (host side: accept/reject; requester side: status)
 
 ## Step 7a — Explainable matching backend
-- [ ] Hard filters (deal_breakers) then weighted soft score over vibe dimensions
-- [ ] match_score_cache table, invalidation on vibe_profile change
-- [ ] Explainability payload: matches[] / mismatches[] with human-readable labels
+- [x] Hard filters (deal_breakers) then weighted soft score over vibe dimensions
+- [x] match_score_cache table, invalidation on vibe_profile change
+- [x] Explainability payload: matches[] / mismatches[] with human-readable labels
 
 ## Step 7b — Matching frontend: trip detail breakdown
 - [ ] Trip detail screen showing explainable match breakdown (% + matches/mismatches)

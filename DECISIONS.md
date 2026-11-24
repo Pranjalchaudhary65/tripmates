@@ -193,3 +193,14 @@ One line per commit: what I built, and the key decision behind it.
   list of destinations with their coordinates instead of a map widget, which
   keeps the bundle free of a map library and still lets anyone type exact
   coordinates. Refused to put any ID that is not a UUID into an API path.
+- **Step 7a** — Built explainable matching: deal-breakers as SQL on both
+  sides first, then a weighted soft score over the eight vibe dimensions
+  with fixed-sentence reasons. Kept deal-breakers out of the pluggable
+  scorer, so no scorer, rule-based or model-backed, can let a ruled-out trip
+  through, and checked them again on join so a link cannot bypass a host's
+  limits. Made the cache self-validating with the scorer id and both
+  profiles' updated_at on every row, instead of deleting rows on a profile
+  change event, because the outbox relay does not exist yet and a delete
+  races with a reader writing back a score from the old profile. Embedded
+  the breakdown in the trip detail response instead of a separate endpoint,
+  so the trip screen stays one call.
