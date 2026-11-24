@@ -2,6 +2,7 @@ import { TRIP_ID } from './tripFixtures';
 
 export const CONVERSATION_ID = '3a4b5c6d-7e8f-4a0b-9c1d-2e3f4a5b6c7d';
 export const OTHER_CONVERSATION_ID = '4b5c6d7e-8f90-4b1c-8d2e-3f4a5b6c7d8e';
+export const MATCH_ID = '5c6d7e8f-9001-4c2d-9e3f-4a5b6c7d8e9f';
 
 /** ChatMessageResponse as the backend writes it: a message from the other person by default. */
 export function chatMessage(seq: number, overrides: Record<string, unknown> = {}) {
@@ -23,6 +24,7 @@ export function chatMessage(seq: number, overrides: Record<string, unknown> = {}
 export function conversationSummary(overrides: Record<string, unknown> = {}) {
   return {
     id: CONVERSATION_ID,
+    matchId: MATCH_ID,
     trip: {
       id: TRIP_ID,
       title: 'Monsoon weekend in Gokarna',
