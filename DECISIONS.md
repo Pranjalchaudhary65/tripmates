@@ -237,3 +237,11 @@ One line per commit: what I built, and the key decision behind it.
   depends on meet-up and the rating stays unreachable at compile time;
   chose to compute daylight from the sun at the venue over a fixed 8-to-6
   window, which would allow dusk meetings in winter in the north.
+- **Step 8d** — Built the meet-up screens: one match page that shows only
+  the next step (video call, venue and daylight time, confirmation,
+  check-in and "I'm safe", private comfort rating, locked or didn't
+  proceed), a check-in screen using the live camera and a fresh location,
+  and the emergency contact form. Chose to offer only the server's daylight
+  windows in the time picker over a free time input, and to search venues
+  near the trip, a city, or halfway between two cities picked by the user,
+  so no one's home location is ever sent or stored.

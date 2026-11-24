@@ -138,10 +138,10 @@ Deadline: 2026-11-30.
 - [x] Trip lock gate: trip_members.status -> LOCKED only once meetup COMPLETED and no below-threshold rating
 
 ## Step 8d — Public meet-up frontend
-- [ ] Meetup proposal/scheduling screen (venue picker from allowlist, time picker constrained to daylight hours)
-- [ ] Arrival check-in screen (geofence status + selfie capture)
-- [ ] Private comfort-rating prompt post-meetup
-- [ ] "This match didn't proceed" generic decline screen (no reason shown, either direction)
+- [x] Meetup proposal/scheduling screen (venue picker from allowlist, time picker constrained to daylight hours)
+- [x] Arrival check-in screen (geofence status + selfie capture)
+- [x] Private comfort-rating prompt post-meetup
+- [x] "This match didn't proceed" generic decline screen (no reason shown, either direction)
 
 ## Step 9a — Trip Lock + Settlement backend
 - [ ] ledger_entries (append-only, no UPDATE/DELETE grants), settlements,
