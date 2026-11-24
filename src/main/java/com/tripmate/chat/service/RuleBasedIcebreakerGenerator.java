@@ -11,17 +11,16 @@ import java.util.Locale;
 
 /**
  * Opening lines built from the trip's own facts: where, when, how long, on
- * what budget, and which side of the trip the asker is on. Three are chosen
- * per conversation, the same three every time it is opened, from a pool
- * that always has at least that many.
+ * what budget, and which side of the trip the asker is on. Every candidate is
+ * returned, greeting first, the rest rotated per conversation so the same
+ * conversation always gets the same order; the caller keeps the first few
+ * that survive its checks.
  */
 @Component
 @ConditionalOnProperty(name = "tripmate.chat.icebreakers", havingValue = RuleBasedIcebreakerGenerator.ID)
 public class RuleBasedIcebreakerGenerator implements IcebreakerGenerator {
 
     public static final String ID = "rule-based";
-
-    static final int SUGGESTIONS = 3;
 
     @Override
     public String id() {
@@ -56,15 +55,12 @@ public class RuleBasedIcebreakerGenerator implements IcebreakerGenerator {
         pool.add("How do you usually like to split costs on a trip?");
         pool.add("Are you more of a planner, or do you like to figure things out on the way?");
 
-        int start = Math.floorMod(context.conversationId().hashCode(), pool.size());
-        List<String> chosen = new ArrayList<>(SUGGESTIONS);
-        chosen.add(pool.get(0));
-        for (int i = 0; chosen.size() < SUGGESTIONS; i++) {
-            String candidate = pool.get(1 + Math.floorMod(start + i, pool.size() - 1));
-            if (!chosen.contains(candidate)) {
-                chosen.add(candidate);
-            }
+        int start = Math.floorMod(context.conversationId().hashCode(), pool.size() - 1);
+        List<String> ordered = new ArrayList<>(pool.size());
+        ordered.add(pool.getFirst());
+        for (int i = 0; i < pool.size() - 1; i++) {
+            ordered.add(pool.get(1 + Math.floorMod(start + i, pool.size() - 1)));
         }
-        return chosen;
+        return ordered;
     }
 }

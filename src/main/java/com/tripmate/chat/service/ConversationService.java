@@ -53,6 +53,8 @@ public class ConversationService {
 
     static final int MAX_ICEBREAKER_LENGTH = 200;
 
+    static final int MAX_ICEBREAKERS = 3;
+
     private final AccountService accounts;
 
     private final ConversationRepository conversations;
@@ -163,10 +165,10 @@ public class ConversationService {
     }
 
     /**
-     * Opening lines for the caller, from the trip's facts. Each suggestion
-     * goes through the same cleaning and redaction as a message, and one
-     * that would carry a contact detail, or comes back empty or too long, is
-     * dropped rather than shown.
+     * Up to three opening lines for the caller, from the trip's facts. Each
+     * candidate goes through the same cleaning and redaction as a message,
+     * and one that would carry a contact detail, or comes back empty or too
+     * long, is dropped rather than shown; the next candidate takes its place.
      */
     public List<String> icebreakers(SessionPrincipal caller, UUID conversationId) {
         consumeRead(caller);
@@ -179,6 +181,9 @@ public class ConversationService {
                 card.trip().budgetBand(), card.viewerIsHost(), card.other().firstName()));
         List<String> safe = new ArrayList<>();
         for (String suggestion : suggestions == null ? List.<String>of() : suggestions) {
+            if (safe.size() == MAX_ICEBREAKERS) {
+                break;
+            }
             String clean = MessageSanitizer.clean(suggestion);
             Redaction redaction = ContactRedactor.redact(clean);
             if (!clean.isEmpty() && !redaction.redacted()

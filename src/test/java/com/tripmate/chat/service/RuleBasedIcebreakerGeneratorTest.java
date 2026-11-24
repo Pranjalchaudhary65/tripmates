@@ -17,10 +17,20 @@ class RuleBasedIcebreakerGeneratorTest {
 
     @ParameterizedTest
     @EnumSource(BudgetBand.class)
-    void suggestsThreeDistinctLinesForEveryBudget(BudgetBand band) {
+    void offersMoreDistinctCandidatesThanAreShownForEveryBudget(BudgetBand band) {
         List<String> suggestions = generator.suggest(context(UUID.randomUUID(), band, false));
 
-        assertThat(suggestions).hasSize(3).doesNotHaveDuplicates().allSatisfy(line -> assertThat(line).isNotBlank());
+        assertThat(suggestions).hasSizeGreaterThan(3).doesNotHaveDuplicates()
+                .allSatisfy(line -> assertThat(line).isNotBlank());
+    }
+
+    @Test
+    void everyConversationGetsAtLeastThreeCandidatesThatDoNotNameThePlace() {
+        for (int i = 0; i < 50; i++) {
+            assertThat(generator.suggest(context(UUID.randomUUID(), BudgetBand.MID, i % 2 == 0)))
+                    .filteredOn(line -> !line.contains("Hampi"))
+                    .hasSizeGreaterThanOrEqualTo(3);
+        }
     }
 
     @Test

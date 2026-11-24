@@ -25,6 +25,11 @@ public interface IcebreakerGenerator {
     /** The value of {@code tripmate.chat.icebreakers} that selects this implementation. */
     String id();
 
+    /**
+     * Candidate lines, best first. Return more than will be shown: the caller
+     * drops any that fail its checks and keeps the first few that pass, so a
+     * trip whose own text trips the redactor still gets suggestions.
+     */
     List<String> suggest(Context context);
 
     /**

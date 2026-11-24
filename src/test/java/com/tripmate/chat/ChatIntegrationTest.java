@@ -326,7 +326,7 @@ class ChatIntegrationTest {
         List<String> suggestions = JsonPath.read(pair.companionChat().icebreakers(pair.companion().token(),
                 pair.conversationId()).body(), "$.suggestions");
 
-        assertThat(suggestions).isNotEmpty().noneMatch(line -> line.contains("9876543210"));
+        assertThat(suggestions).hasSize(3).noneMatch(line -> line.contains("9876543210"));
     }
 
     private static int unread(ChatApi chat, String token) {
