@@ -16,6 +16,9 @@ public record ConversationSummaryResponse(
 
         UUID id,
 
+        @Schema(description = "The accepted join request this chat belongs to; the meet-up screens are addressed by it")
+        UUID matchId,
+
         Trip trip,
 
         Person otherPerson,

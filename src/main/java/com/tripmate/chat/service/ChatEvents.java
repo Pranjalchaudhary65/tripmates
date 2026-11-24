@@ -23,6 +23,13 @@ public final class ChatEvents {
                                 MessageView forRecipient, long recipientUnread) {
     }
 
+    /**
+     * A SYSTEM message both people see, with each one's unread count after it.
+     */
+    public record SystemPosted(UUID conversationId, UUID hostUserId, UUID requesterUserId, MessageView message,
+                               long hostUnread, long requesterUnread) {
+    }
+
     /** The reader's marker moved, so their other open tabs can update their unread count. */
     public record ReadMoved(UUID conversationId, UUID readerId, long readerUnread) {
     }

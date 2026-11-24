@@ -4,6 +4,7 @@ import com.tripmate.chat.dto.ChatEventResponse;
 import com.tripmate.chat.dto.ChatMapper;
 import com.tripmate.chat.service.ChatEvents.MessagePosted;
 import com.tripmate.chat.service.ChatEvents.ReadMoved;
+import com.tripmate.chat.service.ChatEvents.SystemPosted;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.MessagingException;
@@ -46,6 +47,14 @@ public class ChatPush {
                 mapper.toResponse(posted.forSender()), 0L));
         send(posted.recipientId(), new ChatEventResponse(ChatEventResponse.Type.MESSAGE, posted.conversationId(),
                 mapper.toResponse(posted.forRecipient()), posted.recipientUnread()));
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void systemPosted(SystemPosted posted) {
+        send(posted.hostUserId(), new ChatEventResponse(ChatEventResponse.Type.MESSAGE, posted.conversationId(),
+                mapper.toResponse(posted.message()), posted.hostUnread()));
+        send(posted.requesterUserId(), new ChatEventResponse(ChatEventResponse.Type.MESSAGE,
+                posted.conversationId(), mapper.toResponse(posted.message()), posted.requesterUnread()));
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)

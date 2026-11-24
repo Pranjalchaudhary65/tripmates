@@ -1,6 +1,12 @@
 package com.tripmate.chat.service;
 
+import com.tripmate.chat.entity.ChatMessage;
 import com.tripmate.chat.entity.Conversation;
+import com.tripmate.chat.entity.SystemCode;
+import com.tripmate.chat.service.ChatEvents.SystemPosted;
+import com.tripmate.trips.service.CompanionLocked;
+import com.tripmate.trips.service.CompanionReleased;
+import java.time.Instant;
 import com.tripmate.chat.repository.ChatMessageRepository;
 import com.tripmate.chat.repository.ChatQueries;
 import com.tripmate.chat.repository.ChatQueries.ConversationCard;
@@ -114,6 +120,40 @@ public class ConversationService {
             conversations.save(Conversation.open(accepted.tripId(), accepted.hostUserId(),
                     accepted.companionUserId(), accepted.acceptedAt()));
         }
+    }
+
+    /** The trip locked for this companion: contact details unlock, and both people are told in the chat. */
+    @EventListener
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void onCompanionLocked(CompanionLocked locked) {
+        conversations.findByTripAndRequesterForUpdate(locked.tripId(), locked.companionUserId())
+                .filter(conversation -> conversation.unlockContact(locked.lockedAt()))
+                .ifPresent(conversation -> postSystem(conversation, SystemCode.CONTACT_UNLOCKED, locked.lockedAt()));
+    }
+
+    /**
+     * The match stopped for safety. The conversation closes for both; the
+     * notice says only that it closed, never why or who.
+     */
+    @EventListener
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void onCompanionReleased(CompanionReleased released) {
+        conversations.findByTripAndRequesterForUpdate(released.tripId(), released.companionUserId())
+                .filter(conversation -> conversation.close(released.releasedAt()))
+                .ifPresent(conversation -> postSystem(conversation, SystemCode.CONVERSATION_CLOSED,
+                        released.releasedAt()));
+    }
+
+    private void postSystem(Conversation conversation, SystemCode code, Instant now) {
+        long seq = conversation.nextSystemSeq(now);
+        ChatMessage message = messages.save(ChatMessage.system(conversation.getId(), seq, code, now));
+        conversations.save(conversation);
+        UUID host = conversation.getHostUserId();
+        UUID requester = conversation.getRequesterUserId();
+        events.publishEvent(new SystemPosted(conversation.getId(), host, requester,
+                MessageReader.view(message, host, null),
+                messages.countUnread(conversation.getId(), host, conversation.readSeqOf(host)),
+                messages.countUnread(conversation.getId(), requester, conversation.readSeqOf(requester))));
     }
 
     public Page<InboxItem> inbox(SessionPrincipal caller, Pageable pageable) {

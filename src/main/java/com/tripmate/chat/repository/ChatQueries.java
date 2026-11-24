@@ -26,8 +26,9 @@ import java.util.UUID;
 /**
  * The inbox and conversation header reads, one query each. The trip comes
  * from {@code trip_facts} and the other person from
- * {@code user_public_facts}, the views trips and identity publish; nothing
- * here reads {@code trips} or {@code users}. Every query is narrowed to
+ * {@code user_public_facts}, and the match from {@code trip_member_facts}, the
+ * views trips and identity publish; nothing here reads {@code trips},
+ * {@code trip_members} or {@code users}. Every query is narrowed to
  * conversations the viewer is in, in SQL, so a row about anyone else's
  * conversation is never loaded at all.
  */
@@ -36,7 +37,7 @@ public class ChatQueries {
 
     private static final String COLUMNS = """
             c.id, c.status, c.contact_unlocked_at, c.last_message_at, c.created_at, c.last_seq,
-            c.host_user_id = :viewer AS viewer_is_host,
+            c.host_user_id = :viewer AS viewer_is_host, mf.member_id AS match_id,
             CASE WHEN c.host_user_id = :viewer THEN c.requester_user_id ELSE c.host_user_id END AS other_user_id,
             t.trip_id, t.title, t.destination_name, t.start_date, t.end_date, t.budget_band, t.status AS trip_status,
             o.first_name AS other_first_name, o.id_verification_tier AS other_tier, o.active AS other_active,
@@ -53,7 +54,8 @@ public class ChatQueries {
             JOIN trip_facts t ON t.trip_id = c.trip_id
             JOIN user_public_facts o
               ON o.user_id = CASE WHEN c.host_user_id = :viewer THEN c.requester_user_id ELSE c.host_user_id END
-            LEFT JOIN chat_messages lm ON lm.conversation_id = c.id AND lm.seq = c.last_seq""";
+            LEFT JOIN chat_messages lm ON lm.conversation_id = c.id AND lm.seq = c.last_seq
+            LEFT JOIN trip_member_facts mf ON mf.trip_id = c.trip_id AND mf.user_id = c.requester_user_id""";
 
     private static final String VIEWER_IN = "(c.host_user_id = :viewer OR c.requester_user_id = :viewer)";
 
@@ -104,6 +106,7 @@ public class ChatQueries {
                 rs.getObject("id", UUID.class),
                 ConversationStatus.valueOf(rs.getString("status")),
                 rs.getBoolean("viewer_is_host"),
+                rs.getObject("match_id", UUID.class),
                 rs.getObject("other_user_id", UUID.class),
                 new TripFacts(rs.getObject("trip_id", UUID.class), rs.getString("title"),
                         rs.getString("destination_name"), rs.getObject("start_date", LocalDate.class),
@@ -133,7 +136,8 @@ public class ChatQueries {
      * @param otherUserId for the service's decisions (whose key opens the last
      *                    message, whose contact to reveal); never returned to a client
      */
-    public record ConversationCard(UUID id, ConversationStatus status, boolean viewerIsHost, UUID otherUserId,
+    public record ConversationCard(UUID id, ConversationStatus status, boolean viewerIsHost, UUID matchId,
+                                   UUID otherUserId,
                                    TripFacts trip, OtherPerson other, Instant contactUnlockedAt, long unreadCount,
                                    Instant lastMessageAt, Instant createdAt, LastMessage lastMessage) {
 

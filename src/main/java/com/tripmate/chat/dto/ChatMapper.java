@@ -23,7 +23,7 @@ public interface ChatMapper {
     default ConversationSummaryResponse toResponse(InboxItem item) {
         ConversationCard card = item.card();
         LastMessage last = card.lastMessage();
-        return new ConversationSummaryResponse(card.id(),
+        return new ConversationSummaryResponse(card.id(), card.matchId(),
                 new ConversationSummaryResponse.Trip(card.trip().id(), card.trip().title(),
                         card.trip().destinationName(), card.trip().startDate(), card.trip().endDate(),
                         card.trip().status()),
