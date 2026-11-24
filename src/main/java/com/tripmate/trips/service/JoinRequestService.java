@@ -14,6 +14,7 @@ import com.tripmate.trips.repository.TripCards.OutgoingRequest;
 import com.tripmate.trips.repository.TripMemberRepository;
 import com.tripmate.trips.repository.TripQueries;
 import com.tripmate.trips.repository.TripRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -67,12 +68,14 @@ public class JoinRequestService {
 
     private final TransactionTemplate readOnly;
 
+    private final ApplicationEventPublisher events;
+
     private final Clock clock;
 
     public JoinRequestService(AccountService accounts, TripRepository trips, TripMemberRepository members,
                               TripQueries queries, MatchService matches, RateLimiter rateLimiter,
                               TripProperties properties, PlatformTransactionManager transactionManager,
-                              Clock clock) {
+                              ApplicationEventPublisher events, Clock clock) {
         this.accounts = accounts;
         this.trips = trips;
         this.members = members;
@@ -83,6 +86,7 @@ public class JoinRequestService {
         this.transactions = new TransactionTemplate(transactionManager);
         this.readOnly = new TransactionTemplate(transactionManager);
         this.readOnly.setReadOnly(true);
+        this.events = events;
         this.clock = clock;
     }
 
@@ -169,6 +173,10 @@ public class JoinRequestService {
             member.reject(now);
         }
         members.save(member);
+        if (accept) {
+            events.publishEvent(new CompanionAccepted(trip.getId(), member.getId(), trip.getHostUserId(),
+                    member.getUserId(), now));
+        }
         return new Decision(member, trip);
     }
 
