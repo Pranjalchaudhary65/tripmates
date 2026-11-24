@@ -7,6 +7,7 @@ import com.tripmate.identity.RegistrationApi;
 import com.tripmate.identity.SessionApi;
 import com.tripmate.identity.TwoFactorApi;
 import com.tripmate.identity.VerificationApi;
+import com.tripmate.meetup.MeetupApi;
 import com.tripmate.platform.error.ProblemErrorController;
 import com.tripmate.support.IntegrationTest;
 import com.tripmate.support.LocalHttp;
@@ -165,6 +166,25 @@ class EndpointAuthorizationMatrixIntegrationTest {
             Route.owned("GET", "/api/v1/conversations/{conversationId}/contact", Setup.CONTACT_UNLOCKED,
                     "conversationId", 200),
 
+            Route.self("GET", "/api/v1/users/me/emergency-contact", Setup.SIGNED_IN, 200, Route.NO_BODY),
+            Route.self("PUT", "/api/v1/users/me/emergency-contact", Setup.SIGNED_IN, 200,
+                    actor -> MeetupApi.emergencyContactJson("+91 90000 00021")),
+            Route.self("DELETE", "/api/v1/users/me/emergency-contact", Setup.SIGNED_IN, 204, Route.NO_BODY),
+            Route.owned("GET", "/api/v1/matches/{matchId}", Setup.MATCHED, "matchId", 200),
+            Route.owned("GET", "/api/v1/matches/{matchId}/venues", Setup.MATCHED, "matchId", 200),
+            Route.owned("POST", "/api/v1/matches/{matchId}/video-call", Setup.MATCHED, "matchId", 200),
+            Route.owned("POST", "/api/v1/matches/{matchId}/meetup", Setup.MEETUP_READY, "matchId", 201,
+                    actor -> MeetupApi.proposalJson(actor.extra("venueId"), actor.extra("meetupStart"), false)),
+            Route.owned("POST", "/api/v1/matches/{matchId}/meetup/confirm", Setup.MEETUP_PROPOSED, "matchId", 200,
+                    actor -> "{\"bringingPlusOne\":false}"),
+            Route.owned("POST", "/api/v1/matches/{matchId}/meetup/cancel", Setup.MEETUP_PROPOSED, "matchId", 200,
+                    actor -> "{\"type\":\"CONVENIENCE\"}"),
+            Route.owned("POST", "/api/v1/matches/{matchId}/meetup/check-in", Setup.MEETUP_STARTING, "matchId", 200,
+                    actor -> MeetupApi.checkInParts(Double.parseDouble(actor.extra("venueLatitude")),
+                            Double.parseDouble(actor.extra("venueLongitude")), 10.0, TestImages.jpeg(0))),
+            Route.owned("POST", "/api/v1/matches/{matchId}/meetup/safe", Setup.MEETUP_STARTING, "matchId", 200),
+            Route.owned("POST", "/api/v1/matches/{matchId}/meetup/feedback", Setup.MEETUP_COMPLETED, "matchId", 200,
+                    actor -> "{\"comfortRating\":4}"),
             Route.admin("GET", "/api/v1/admin/users/{userId}", 200, Route.NO_BODY),
             Route.admin("GET", "/api/v1/admin/verifications", 200, Route.NO_BODY),
             Route.admin("POST", "/api/v1/admin/verifications/{verificationId}/decision", 200, actor -> """
@@ -453,29 +473,35 @@ class EndpointAuthorizationMatrixIntegrationTest {
                 HttpResponse<String> taken = new VibeApi(http).submit(token, VibeApi.FIRST_OPTIONS);
                 assertThat(taken.statusCode()).as(taken.body()).isEqualTo(200);
             }
-            case HOSTING, HOSTING_REQUEST, IN_CONVERSATION, CONTACT_UNLOCKED -> {
+            case HOSTING, HOSTING_REQUEST, IN_CONVERSATION, CONTACT_UNLOCKED, MATCHED, MEETUP_READY, MEETUP_PROPOSED,
+                 MEETUP_STARTING, MEETUP_COMPLETED -> {
                 String tripId = new TripApi(http).open(token, TripApi.tripJson(TripApi.uniquePlace(), 2));
                 extras.put("tripId", tripId);
+                LocalHttp requesterHttp = null;
+                String requesterToken = null;
                 if (setup != Setup.HOSTING) {
-                    LocalHttp requesterHttp = new LocalHttp(port);
+                    requesterHttp = new LocalHttp(port);
                     String requesterEmail = RegistrationApi.uniqueEmail();
                     new RegistrationApi(requesterHttp, mailpit).registerVerified(requesterEmail);
-                    String requesterToken = new SessionApi(requesterHttp).signIn(requesterEmail, STRONG_PASSWORD)
+                    requesterToken = new SessionApi(requesterHttp).signIn(requesterEmail, STRONG_PASSWORD)
                             .accessToken();
                     extras.put("requestId", new TripApi(requesterHttp).join(requesterToken, tripId));
                 }
-                if (setup == Setup.IN_CONVERSATION || setup == Setup.CONTACT_UNLOCKED) {
+                if (setup != Setup.HOSTING && setup != Setup.HOSTING_REQUEST) {
                     HttpResponse<String> accepted = new TripApi(http).accept(token, extras.get("requestId"));
                     assertThat(accepted.statusCode()).as(accepted.body()).isEqualTo(200);
                     String conversationId = new ChatApi(http).onlyConversationId(token);
                     extras.put("conversationId", conversationId);
+                    extras.put("matchId", extras.get("requestId"));
                     if (setup == Setup.CONTACT_UNLOCKED) {
                         jdbc.update("update conversations set contact_unlocked_at = now() where id = ?::uuid",
                                 conversationId);
                     }
                 }
-            }
-            case CAN_VOUCH, VOUCHING -> {
+                if (setup.ordinal() >= Setup.MEETUP_READY.ordinal()) {
+                    prepareMeetup(setup, http, token, requesterHttp, requesterToken, tripId, extras);
+                }
+            }            case CAN_VOUCH, VOUCHING -> {
                 verification.reachSelfieMatch(email, token);
                 LocalHttp friendHttp = new LocalHttp(port);
                 String friendEmail = RegistrationApi.uniqueEmail();
@@ -492,7 +518,51 @@ class EndpointAuthorizationMatrixIntegrationTest {
         return new Actor(http, email, session, authenticator, extras);
     }
 
-    /** A selfie waiting for review, written straight to the table: the admin routes only need it to exist. */
+    /** Walks the owner's match up the meet-up ladder to the rung the setup names. */
+    private void prepareMeetup(Setup setup, LocalHttp hostHttp, String hostToken, LocalHttp companionHttp,
+                               String companionToken, String tripId, Map<String, String> extras) {
+        String matchId = extras.get("matchId");
+        MeetupApi host = new MeetupApi(hostHttp);
+        MeetupApi companion = new MeetupApi(companionHttp);
+        Map<String, Object> trip = jdbc.queryForMap(
+                "select destination_latitude, destination_longitude from trips where id = ?::uuid", tripId);
+        double latitude = ((Number) trip.get("destination_latitude")).doubleValue();
+        double longitude = ((Number) trip.get("destination_longitude")).doubleValue();
+        String venueId = jdbc.queryForObject("""
+                insert into verified_venues (name, address, city, category, latitude, longitude, time_zone)
+                values ('Station forecourt', 'Station Road', 'Testpur', 'TRANSIT_HUB', ?, ?, 'UTC')
+                returning id::text""", String.class, latitude, longitude);
+        extras.put("venueId", venueId);
+        extras.put("venueLatitude", String.valueOf(latitude));
+        extras.put("venueLongitude", String.valueOf(longitude));
+        assertThat(host.videoCall(hostToken, matchId).statusCode()).isEqualTo(200);
+        assertThat(companion.videoCall(companionToken, matchId).statusCode()).isEqualTo(200);
+        assertThat(host.setEmergencyContact(hostToken, "+91 90000 00011").statusCode()).isEqualTo(200);
+        HttpResponse<String> venues = host.venues(hostToken, matchId, "");
+        List<String> starts = JsonPath.read(venues.body(),
+                "$.venues[?(@.venue.id == '" + venueId + "')].windows[0].earliest");
+        extras.put("meetupStart", starts.getFirst());
+        if (setup == Setup.MEETUP_READY) {
+            return;
+        }
+        assertThat(companion.setEmergencyContact(companionToken, "+91 90000 00012").statusCode()).isEqualTo(200);
+        HttpResponse<String> proposed = companion.propose(companionToken, matchId, venueId, starts.getFirst());
+        assertThat(proposed.statusCode()).as(proposed.body()).isEqualTo(201);
+        if (setup == Setup.MEETUP_PROPOSED) {
+            return;
+        }
+        assertThat(host.confirm(hostToken, matchId).statusCode()).isEqualTo(200);
+        jdbc.update("update meetups set scheduled_at = now() + interval '10 minutes' where member_id = ?::uuid",
+                matchId);
+        if (setup == Setup.MEETUP_COMPLETED) {
+            assertThat(host.checkIn(hostToken, matchId, latitude, longitude, 10.0, TestImages.jpeg(0)).statusCode())
+                    .isEqualTo(200);
+            assertThat(companion.checkIn(companionToken, matchId, latitude, longitude, 10.0, TestImages.jpeg(1))
+                    .statusCode()).isEqualTo(200);
+        }
+    }
+
+    /** A selfie in a pending selfie check: the admin routes only need it to exist. */
     private String pendingSelfieOf(String userId) {
         return jdbc.queryForObject("""
                 insert into identity_verifications (user_id, tier, status, similarity_score, selfie_image_key,
@@ -521,7 +591,7 @@ class EndpointAuthorizationMatrixIntegrationTest {
         for (String path : List.of("/api/v1/users/me", "/api/v1/auth/2fa", "/api/v1/auth/sessions",
                 "/api/v1/verification", "/api/v1/vouches", "/api/v1/vibe/profile", "/api/v1/vibe/quiz",
                 "/api/v1/trips/hosted", "/api/v1/join-requests/incoming", "/api/v1/join-requests/outgoing",
-                "/api/v1/conversations")) {
+                "/api/v1/conversations", "/api/v1/users/me/emergency-contact")) {
             HttpResponse<String> response = owner.http().get(path, "Authorization", bearer);
             assertThat(response.statusCode()).as("owner reading %s: %s", path, response.body()).isEqualTo(200);
             bodies.add(SIGNED_LINK.matcher(response.body()).replaceAll("\"profilePhoto\":{}"));
@@ -609,7 +679,17 @@ class EndpointAuthorizationMatrixIntegrationTest {
         /** Hosting a trip whose request from another account was accepted; extras tripId, requestId, conversationId. */
         IN_CONVERSATION,
         /** In a conversation whose trip has locked, so contact details are unlocked; extras as IN_CONVERSATION. */
-        CONTACT_UNLOCKED
+        CONTACT_UNLOCKED,
+        /** Hosting a trip with an accepted companion; extras as IN_CONVERSATION plus matchId. */
+        MATCHED,
+        /** Matched, the video call confirmed by both, an emergency contact set, and a venue at the trip; extras venueId, meetupStart, venueLatitude, venueLongitude. */
+        MEETUP_READY,
+        /** Ready, and the companion has proposed a meet-up. */
+        MEETUP_PROPOSED,
+        /** Proposed, confirmed by the owner, and starting in ten minutes, so check-in is open. */
+        MEETUP_STARTING,
+        /** Starting, and both people have checked in. */
+        MEETUP_COMPLETED
     }
 
     /**
