@@ -127,7 +127,8 @@ class LiveTripIntegrationTest {
                 String.class, crew.tripId())).containsExactly("CONFIRMED", "PENDING");
         String buddyView = new SafetyApi(crew.companion(0).http()).live(crew.companion(0).token(), crew.tripId()).body();
         assertThat(JsonPath.<String>read(buddyView, "$.buddies[0].lastCheckInAt")).isNotNull();
-        assertThat(buddyView).doesNotContain(String.valueOf(stored));
+        assertThat(JsonPath.<Map<String, Object>>read(buddyView, "$.buddies[0]"))
+                .doesNotContainKeys("latitude", "longitude", "roundedLatitude", "location");
     }
 
     @Test
