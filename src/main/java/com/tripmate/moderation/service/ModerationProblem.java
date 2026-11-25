@@ -15,7 +15,14 @@ public enum ModerationProblem implements ProblemType {
             "Keep the details to 1000 characters of plain text.", "details"),
 
     ALREADY_REPORTED(HttpStatus.CONFLICT, "already_reported",
-            "You have already reported this person. A moderator will look at it.", null);
+            "You have already reported this person. A moderator will look at it.", null),
+
+    INVALID_DECISION(HttpStatus.BAD_REQUEST, "invalid_decision", "Choose ACTIONED or DISMISSED.", "decision"),
+
+    REPORT_CLOSED(HttpStatus.CONFLICT, "report_closed", "This report has already been closed.", null),
+
+    CANNOT_MODERATE_SELF(HttpStatus.CONFLICT, "cannot_moderate_self",
+            "You cannot decide about a report you are part of, or about your own account.", null);
 
     private final HttpStatus status;
 
