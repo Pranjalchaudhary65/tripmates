@@ -209,6 +209,26 @@ tripmate:
     job-interval: 1h
     job-batch: 200
 
+  safety:
+    # Per account: sharing changes and check-ins; and the live trip screen.
+    write-limit:
+      capacity: 120
+      period: 1h
+    read-limit:
+      capacity: 600
+      period: 10m
+    # SOS is never refused in earnest; this only stops someone flooding
+    # their emergency contact.
+    sos-limit:
+      capacity: 20
+      period: 1h
+    # A check-in is emailed about when it is due; still unanswered this long
+    # after, the emergency contact is alerted.
+    escalate-after: 60m
+    max-sos-alert-attempts: 10
+    job-interval: 1m
+    job-batch: 100
+
   matching:
     # Which MatchScorer computes the soft score. "rule-based" (the default) is a
     # fixed weighted comparison that needs no API key. Deal-breakers are hard

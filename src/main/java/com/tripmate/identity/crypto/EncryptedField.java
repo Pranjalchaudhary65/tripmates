@@ -20,7 +20,16 @@ public enum EncryptedField {
     MEETUP_PRIVATE_NOTE("meetup.private_note"),
 
     /** The UPI ID a user wants to be paid at; often their phone number with a bank suffix. */
-    UPI_ID("upi_ids.vpa_ciphertext");
+    UPI_ID("upi_ids.vpa_ciphertext"),
+
+    /** A traveller's own note for their emergency contact (where they are staying, who to ask for). */
+    ITINERARY_NOTE("itinerary_shares.note_ciphertext"),
+
+    /** The exact point of a trip check-in; only a rounded one is stored in the clear. */
+    CHECKIN_LOCATION("checkins.location_ciphertext"),
+
+    /** The exact point an SOS was raised from. */
+    SOS_LOCATION("sos_events.last_known_location_ciphertext");
 
     private final String column;
 
