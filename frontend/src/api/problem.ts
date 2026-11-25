@@ -118,6 +118,11 @@ const SERVER_WORDED_CODES: ReadonlySet<string> = new Set([
   'not_marked_paid',
   'not_a_party',
   'settlement_closed',
+  'trip_not_locked',
+  'trip_over',
+  'not_sharing',
+  'invalid_check_in_interval',
+  'invalid_note',
 ]);
 
 /**
