@@ -196,6 +196,8 @@ lock).
 | Simultaneous reports each count one short and nobody is suspended, or vouchers are penalised twice | Reports about one account are counted under its row lock; `User.suspend` is a no-op on an inactive account, so the penalty runs once | `ModerationService.report`, `AccountModeration.suspend` |
 | A suspended account keeps acting on live tokens | Suspension revokes every session in the same transaction; an access token dies with its session | `AccountModeration.suspend`, `SessionService.revokeEverySession` |
 | A blocked person keeps reaching the blocker | Browse, trip detail, join requests and chat sends all check `user_block_facts` in both directions | `TripQueries`, `TripService`, `JoinRequestService`, `MessageService` |
+| A tampered or buggy response shows a score its breakdown does not explain, or a review the double-blind should still hide | The client's strict reader refuses a breakdown whose points are not value × weight or do not add up to the score, a deduction type the formula does not have, and any review of the user shown while the user's own is still hidden; the screen then shows a generic error | `frontend/src/api/trustApi.ts`, `trustApi.test.ts` |
+| A report or block sent by mistake | Folded away until asked for; block needs a confirm step, report needs a chosen reason; neither reveals anything about the other person's outcome | `frontend/src/components/ReportBlock.tsx`, `trustPages.test.tsx` |
 | Report details read by anyone with database access | Sealed under the reporter's data key, bound to the report ID | `EncryptedField.REPORT_DETAILS`, `ModerationService` |
 ## Explicitly out of scope / accepted risk (document, don't silently skip)
 
