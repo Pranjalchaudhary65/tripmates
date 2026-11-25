@@ -9,6 +9,7 @@ import com.tripmate.identity.TwoFactorApi;
 import com.tripmate.identity.VerificationApi;
 import com.tripmate.meetup.MeetupApi;
 import com.tripmate.platform.error.ProblemErrorController;
+import com.tripmate.settlement.SettlementApi;
 import com.tripmate.support.IntegrationTest;
 import com.tripmate.support.LocalHttp;
 import com.tripmate.support.LocalHttp.Part;
@@ -185,6 +186,22 @@ class EndpointAuthorizationMatrixIntegrationTest {
             Route.owned("POST", "/api/v1/matches/{matchId}/meetup/safe", Setup.MEETUP_STARTING, "matchId", 200),
             Route.owned("POST", "/api/v1/matches/{matchId}/meetup/feedback", Setup.MEETUP_COMPLETED, "matchId", 200,
                     actor -> "{\"comfortRating\":4}"),
+            Route.self("GET", "/api/v1/users/me/upi-id", Setup.SIGNED_IN, 200, Route.NO_BODY),
+            Route.self("PUT", "/api/v1/users/me/upi-id", Setup.SIGNED_IN, 200,
+                    actor -> "{\"upiId\":\"traveller@okbank\"}"),
+            Route.self("DELETE", "/api/v1/users/me/upi-id", Setup.SIGNED_IN, 204, Route.NO_BODY),
+            Route.owned("GET", "/api/v1/trips/{tripId}/ledger", Setup.LEDGER, "tripId", 200),
+            Route.owned("GET", "/api/v1/trips/{tripId}/ledger/history", Setup.LEDGER, "tripId", 200),
+            Route.owned("POST", "/api/v1/trips/{tripId}/expenses", Setup.LEDGER, "tripId", 201,
+                    actor -> SettlementApi.equalSplit(UUID.randomUUID(), "Taxi", 40_000,
+                            List.of(actor.userId(), actor.extra("companionId")))),
+            Route.owned("POST", "/api/v1/expenses/{expenseId}/reverse", Setup.LEDGER_SPENT, "expenseId", 200),
+            Route.owned("POST", "/api/v1/settlements/{settlementId}/mark-paid", Setup.LEDGER_OWING, "settlementId",
+                    200),
+            Route.owned("POST", "/api/v1/settlements/{settlementId}/dispute", Setup.LEDGER_OWING, "settlementId",
+                    200),
+            Route.owned("POST", "/api/v1/settlements/{settlementId}/confirm", Setup.LEDGER_PAID_TO,
+                    "settlementId", 200),
             Route.admin("GET", "/api/v1/admin/users/{userId}", 200, Route.NO_BODY),
             Route.admin("GET", "/api/v1/admin/verifications", 200, Route.NO_BODY),
             Route.admin("POST", "/api/v1/admin/verifications/{verificationId}/decision", 200, actor -> """
@@ -501,7 +518,9 @@ class EndpointAuthorizationMatrixIntegrationTest {
                 if (setup.ordinal() >= Setup.MEETUP_READY.ordinal()) {
                     prepareMeetup(setup, http, token, requesterHttp, requesterToken, tripId, extras);
                 }
-            }            case CAN_VOUCH, VOUCHING -> {
+            }
+            case LEDGER, LEDGER_SPENT, LEDGER_OWING, LEDGER_PAID_TO -> prepareLedger(setup, http, token, extras);
+            case CAN_VOUCH, VOUCHING -> {
                 verification.reachSelfieMatch(email, token);
                 LocalHttp friendHttp = new LocalHttp(port);
                 String friendEmail = RegistrationApi.uniqueEmail();
@@ -562,6 +581,55 @@ class EndpointAuthorizationMatrixIntegrationTest {
         }
     }
 
+    /**
+     * The owner hosts a trip with one companion locked in (written directly;
+     * the meet-up's own tests cover earning it), then the ledger is taken to
+     * the state the setup names.
+     */
+    private void prepareLedger(Setup setup, LocalHttp hostHttp, String hostToken, Map<String, String> extras) {
+        String tripId = new TripApi(hostHttp).open(hostToken, TripApi.tripJson(TripApi.uniquePlace(), 2));
+        extras.put("tripId", tripId);
+        LocalHttp companionHttp = new LocalHttp(port);
+        String companionEmail = RegistrationApi.uniqueEmail();
+        new RegistrationApi(companionHttp, mailpit).registerVerified(companionEmail);
+        SessionApi.Session companion = new SessionApi(companionHttp).signIn(companionEmail, STRONG_PASSWORD);
+        String requestId = new TripApi(companionHttp).join(companion.accessToken(), tripId);
+        assertThat(new TripApi(hostHttp).accept(hostToken, requestId).statusCode()).isEqualTo(200);
+        jdbc.update("update trip_members set status = 'LOCKED', video_verified_at = now(), locked_at = now() "
+                + "where id = ?::uuid", requestId);
+        extras.put("companionId", companion.userId());
+        String hostId = jdbc.queryForObject("select host_user_id::text from trips where id = ?::uuid", String.class,
+                tripId);
+        List<String> both = List.of(hostId, companion.userId());
+        SettlementApi host = new SettlementApi(hostHttp);
+        SettlementApi other = new SettlementApi(companionHttp);
+        switch (setup) {
+            case LEDGER -> {
+            }
+            case LEDGER_SPENT -> {
+                HttpResponse<String> spent = host.addExpense(hostToken, tripId,
+                        SettlementApi.equalSplit(UUID.randomUUID(), "Fuel", 20_000, both));
+                assertThat(spent.statusCode()).as(spent.body()).isEqualTo(201);
+                extras.put("expenseId", JsonPath.read(spent.body(), "$.recentExpenses[0].id"));
+            }
+            case LEDGER_OWING -> {
+                HttpResponse<String> spent = other.addExpense(companion.accessToken(), tripId,
+                        SettlementApi.equalSplit(UUID.randomUUID(), "Fuel", 20_000, both));
+                assertThat(spent.statusCode()).as(spent.body()).isEqualTo(201);
+                extras.put("settlementId", JsonPath.read(spent.body(), "$.settlements[0].id"));
+            }
+            case LEDGER_PAID_TO -> {
+                HttpResponse<String> spent = host.addExpense(hostToken, tripId,
+                        SettlementApi.equalSplit(UUID.randomUUID(), "Fuel", 20_000, both));
+                assertThat(spent.statusCode()).as(spent.body()).isEqualTo(201);
+                String settlementId = JsonPath.read(spent.body(), "$.settlements[0].id");
+                assertThat(other.markPaid(companion.accessToken(), settlementId).statusCode()).isEqualTo(200);
+                extras.put("settlementId", settlementId);
+            }
+            default -> throw new IllegalArgumentException("Not a ledger setup: " + setup);
+        }
+    }
+
     /** A selfie in a pending selfie check: the admin routes only need it to exist. */
     private String pendingSelfieOf(String userId) {
         return jdbc.queryForObject("""
@@ -591,7 +659,7 @@ class EndpointAuthorizationMatrixIntegrationTest {
         for (String path : List.of("/api/v1/users/me", "/api/v1/auth/2fa", "/api/v1/auth/sessions",
                 "/api/v1/verification", "/api/v1/vouches", "/api/v1/vibe/profile", "/api/v1/vibe/quiz",
                 "/api/v1/trips/hosted", "/api/v1/join-requests/incoming", "/api/v1/join-requests/outgoing",
-                "/api/v1/conversations", "/api/v1/users/me/emergency-contact")) {
+                "/api/v1/conversations", "/api/v1/users/me/emergency-contact", "/api/v1/users/me/upi-id")) {
             HttpResponse<String> response = owner.http().get(path, "Authorization", bearer);
             assertThat(response.statusCode()).as("owner reading %s: %s", path, response.body()).isEqualTo(200);
             bodies.add(SIGNED_LINK.matcher(response.body()).replaceAll("\"profilePhoto\":{}"));
@@ -689,7 +757,15 @@ class EndpointAuthorizationMatrixIntegrationTest {
         /** Proposed, confirmed by the owner, and starting in ten minutes, so check-in is open. */
         MEETUP_STARTING,
         /** Starting, and both people have checked in. */
-        MEETUP_COMPLETED
+        MEETUP_COMPLETED,
+        /** Hosting a trip with a companion locked in; extras tripId and companionId. */
+        LEDGER,
+        /** On that ledger, an expense the owner recorded; extra expenseId. */
+        LEDGER_SPENT,
+        /** On that ledger, the owner owes the companion; extra settlementId, the owner paying. */
+        LEDGER_OWING,
+        /** On that ledger, the companion owes the owner and marked it as sent; extra settlementId. */
+        LEDGER_PAID_TO
     }
 
     /**
