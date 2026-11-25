@@ -9,6 +9,7 @@ import com.tripmate.identity.TwoFactorApi;
 import com.tripmate.identity.VerificationApi;
 import com.tripmate.meetup.MeetupApi;
 import com.tripmate.platform.error.ProblemErrorController;
+import com.tripmate.safety.SafetyApi;
 import com.tripmate.settlement.SettlementApi;
 import com.tripmate.support.IntegrationTest;
 import com.tripmate.support.LocalHttp;
@@ -202,6 +203,16 @@ class EndpointAuthorizationMatrixIntegrationTest {
                     200),
             Route.owned("POST", "/api/v1/settlements/{settlementId}/confirm", Setup.LEDGER_PAID_TO,
                     "settlementId", 200),
+            Route.owned("GET", "/api/v1/trips/{tripId}/live", Setup.LEDGER, "tripId", 200),
+            Route.owned("PUT", "/api/v1/trips/{tripId}/live/sharing", Setup.LIVE_READY, "tripId", 200,
+                    actor -> SafetyApi.sharingJson(12, "Staying near the beach")),
+            Route.owned("DELETE", "/api/v1/trips/{tripId}/live/sharing", Setup.LEDGER, "tripId", 200),
+            Route.owned("POST", "/api/v1/trips/{tripId}/live/check-in", Setup.LIVE_SHARING, "tripId", 200,
+                    actor -> SafetyApi.locationJson(14.55, 74.31, 20.0)),
+            Route.owned("POST", "/api/v1/trips/{tripId}/sos", Setup.LEDGER, "tripId", 201,
+                    actor -> SafetyApi.sosJson(UUID.randomUUID(), null, null)),
+            Route.owned("POST", "/api/v1/sos/{sosId}/resolve", Setup.SOS_RAISED, "sosId", 200),
+            Route.owned("GET", "/api/v1/trips/{tripId}/premortem", Setup.LEDGER, "tripId", 200),
             Route.admin("GET", "/api/v1/admin/users/{userId}", 200, Route.NO_BODY),
             Route.admin("GET", "/api/v1/admin/verifications", 200, Route.NO_BODY),
             Route.admin("POST", "/api/v1/admin/verifications/{verificationId}/decision", 200, actor -> """
@@ -519,7 +530,8 @@ class EndpointAuthorizationMatrixIntegrationTest {
                     prepareMeetup(setup, http, token, requesterHttp, requesterToken, tripId, extras);
                 }
             }
-            case LEDGER, LEDGER_SPENT, LEDGER_OWING, LEDGER_PAID_TO -> prepareLedger(setup, http, token, extras);
+            case LEDGER, LEDGER_SPENT, LEDGER_OWING, LEDGER_PAID_TO, LIVE_READY, LIVE_SHARING, SOS_RAISED ->
+                    prepareLedger(setup, http, token, extras);
             case CAN_VOUCH, VOUCHING -> {
                 verification.reachSelfieMatch(email, token);
                 LocalHttp friendHttp = new LocalHttp(port);
@@ -625,6 +637,20 @@ class EndpointAuthorizationMatrixIntegrationTest {
                 String settlementId = JsonPath.read(spent.body(), "$.settlements[0].id");
                 assertThat(other.markPaid(companion.accessToken(), settlementId).statusCode()).isEqualTo(200);
                 extras.put("settlementId", settlementId);
+            }
+            case LIVE_READY, LIVE_SHARING -> {
+                assertThat(new MeetupApi(hostHttp).setEmergencyContact(hostToken, "+91 90000 00041").statusCode())
+                        .isEqualTo(200);
+                if (setup == Setup.LIVE_SHARING) {
+                    HttpResponse<String> shared = new SafetyApi(hostHttp).share(hostToken, tripId, 12, null);
+                    assertThat(shared.statusCode()).as(shared.body()).isEqualTo(200);
+                }
+            }
+            case SOS_RAISED -> {
+                HttpResponse<String> raised = new SafetyApi(hostHttp).sos(hostToken, tripId, UUID.randomUUID(),
+                        null, null);
+                assertThat(raised.statusCode()).as(raised.body()).isEqualTo(201);
+                extras.put("sosId", JsonPath.read(raised.body(), "$.openSos.id"));
             }
             default -> throw new IllegalArgumentException("Not a ledger setup: " + setup);
         }
@@ -765,7 +791,13 @@ class EndpointAuthorizationMatrixIntegrationTest {
         /** On that ledger, the owner owes the companion; extra settlementId, the owner paying. */
         LEDGER_OWING,
         /** On that ledger, the companion owes the owner and marked it as sent; extra settlementId. */
-        LEDGER_PAID_TO
+        LEDGER_PAID_TO,
+        /** As LEDGER, with an emergency contact set, so the trip can be shared. */
+        LIVE_READY,
+        /** As LIVE_READY, sharing the trip with check-ins every 12 hours. */
+        LIVE_SHARING,
+        /** As LEDGER, with an SOS raised by the owner; extra sosId. */
+        SOS_RAISED
     }
 
     /**
