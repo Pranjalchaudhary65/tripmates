@@ -111,7 +111,7 @@ dependencies.
 
 | Module | Owns tables | Depends on |
 |---|---|---|
-| `identity` | users, user_encryption_keys, identity_verifications, vouches, user_blocks, otp_codes, totp_backup_codes, refresh_token_families, login_history, emergency_contacts, upi_ids; publishes the read-only views user_public_facts and user_block_facts for other modules' SQL | — (foundation) |
+| `identity` | users, user_encryption_keys, identity_verifications, vouches, user_blocks, consent_records, otp_codes, totp_backup_codes, refresh_token_families, login_history, emergency_contacts, upi_ids; publishes the read-only views user_public_facts and user_block_facts for other modules' SQL | — (foundation) |
 | `vibe` | vibe_profiles, deal_breakers, vibe_quiz_drafts; publishes the read-only view deal_breaker_facts for matching | identity |
 | `trips` | trips, trip_members, match_score_cache; publishes the read-only views trip_facts and trip_member_facts for other modules' SQL | identity, vibe |
 | `chat` | conversations, chat_messages, moderation_flags | identity, trips |
@@ -120,7 +120,8 @@ dependencies.
 | `safety` | itinerary_shares, checkins, sos_events | identity, trips |
 | `trust` | reviews, trust_score_events, trust_score_snapshots, trust_score_state | identity, trips (settlement, meet-up and chat reach it only through the outbox) |
 | `moderation` | reports | identity, trips |
-| `platform` | outbox_events, audit_log, consent_records, data_requests | all (infra module, no business logic) |
+| `compliance` | data_requests | identity, platform (every module contributes to an export through platform's `PersonalDataContributor`) |
+| `platform` | outbox_events, audit_log, audit_integrity_checks | all (infra module, no business logic) |
 
 `trust` is deliberately downstream of everything else: it only ever reacts
 to events other modules publish to the outbox. No module calls into
@@ -1899,6 +1900,64 @@ a case that must not be lost.
   SAFETY cancellation comes from the meet-up (a safety cancel or a low
   comfort rating), so an automatic report would reveal the private comfort
   rating to moderators. The person can report from the same screen.
+**As built (compliance, V23).**
+
+- **Audit log.** A BEFORE INSERT trigger fills `sequence_no` (gapless),
+  `prev_hash` (64 zeros for the first row) and `row_hash =
+  sha256(audit_row_text(...))` under one transaction-scoped advisory lock,
+  so concurrent writers can't chain onto the same row and no caller can
+  choose a hash. `audit_row_text` is a fixed `|`-joined form (UTC
+  timestamp to the microsecond, metadata as jsonb prints it). Append-only
+  by trigger. `ip_address` is not stored: the log outlives account
+  deletion, so it holds IDs, codes and numbers only (`AuditLog` refuses
+  anything else in metadata). Written in the same transaction as: admin
+  verification decisions, suspensions and reinstatements (actor null for
+  the report threshold), reports filed and closed, SOS raised, settlement
+  confirmed, consent changes, data requests (requested, export completed
+  and downloaded, account deleted), manual integrity checks. Logins stay in
+  `login_history`.
+- **Integrity check** (`AuditIntegrity`, daily and on demand from the
+  admin API): reads every row in sequence order, recomputes SHA-256 in
+  Java, checks the sequence and the prev-hash links, and records the result
+  in `audit_integrity_checks` (append-only); a break is logged as an error.
+- **`consent_records`** is owned by identity (it's account data), one row
+  per grant or withdrawal, append-only, latest row wins. TOS and privacy
+  policy recorded at sign-up with the published version
+  (`tripmate.consent.*`); existing users backfilled as version 2026-09.
+  Only LOCATION_SHARING and MARKETING can be withdrawn through the API.
+- **`data_requests`** (new `compliance` module). `export_file_key` became
+  `export_ciphertext`: the export JSON is sealed under the user's own key,
+  kept 7 days, then cleared. Object storage only takes image keys and
+  serves them through signed media links, which an export must never go
+  through, and a later deletion's shred destroys a waiting export. Added
+  `expires_at` and `attempts`; one pending request per type per user.
+  Deletion needs the password again.
+- **Export** is assembled from each module's `PersonalDataContributor`
+  (account, vibe, trips, ledger, safety with rounded points only, trust
+  with only visible received reviews, chat messages the user sent,
+  decrypted), so no module reads another's tables. Never exported:
+  password hash, TOTP secret, phone ciphertext or blind index, other
+  people's messages, the meet-up comfort rating.
+- **Deletion** = every `PersonalDataEraser` (vibe rows, review comments the
+  user wrote) + identity's `AccountDeletion`: email → `deleted-<id>@deleted.invalid`,
+  name → "Deleted user", phone, photo and tier cleared, status DELETED,
+  `deleted_at` set, emergency contact and UPI rows deleted, vouches
+  revoked, every session revoked, every data key shredded (chat, notes,
+  locations, report details and exports become unreadable). The row stays
+  because trips, ledgers and reviews point at it. The photo file is removed
+  after commit.
+- **PII masking in logs:** `PiiMaskingLogCustomizer` (registered as
+  `logging.structured.json.customizer`) masks emails and 10-16 digit phone
+  numbers in every string field of every log line; an integration test
+  signs up, sends a phone code, fails a login and logs both on purpose, and
+  checks neither appears in the captured output.
+- **Admin routes** (all under /admin, so ADMIN + `otp` in amr, plus
+  `AdminGuard`): report queue with details decrypted, report decision
+  (ACTIONED/DISMISSED, optional suspend), suspend/reinstate, audit log page
+  + latest check, run check now, data request list (status only). A
+  moderator can't decide a report they're part of or act on their own
+  account.
+
 ---
 
 ## Trust Score Engine spec
