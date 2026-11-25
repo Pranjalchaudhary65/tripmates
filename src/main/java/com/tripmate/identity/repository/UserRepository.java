@@ -4,9 +4,12 @@ import com.tripmate.identity.entity.User;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -39,6 +42,16 @@ public interface UserRepository extends JpaRepository<User, UUID> {
             where u.phoneBlindIndex = :blindIndex and u.phoneVerifiedAt is not null
               and u.deletedAt is null and u.id <> :exceptUserId""")
     boolean isPhoneVerifiedByAnother(@Param("blindIndex") String blindIndex, @Param("exceptUserId") UUID exceptUserId);
+
+    /**
+     * The trust module's cache column, written without loading the entity:
+     * the score is the trust module's, and the rest of the row is not
+     * touched.
+     */
+    @Modifying(flushAutomatically = true)
+    @Query(value = "UPDATE users SET trust_score = :score, trust_score_updated_at = :at WHERE id = :id",
+            nativeQuery = true)
+    void recordTrustScore(@Param("id") UUID id, @Param("score") BigDecimal score, @Param("at") Instant at);
 
     /** Unlocked read for login, which changes nothing on the user row. Case-insensitive like the locking variant. */
     @Query("select u from User u where u.email = :email and u.deletedAt is null")
