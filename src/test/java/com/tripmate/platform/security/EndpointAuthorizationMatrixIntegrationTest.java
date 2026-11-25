@@ -225,6 +225,22 @@ class EndpointAuthorizationMatrixIntegrationTest {
             Route.self("POST", "/api/v1/reports", Setup.MATCHED, 201, actor -> """
                     {"matchId":"%s","reason":"OTHER","details":"Kept asking for my number"}"""
                     .formatted(actor.extra("matchId"))),
+            Route.self("GET", "/api/v1/users/me/consents", Setup.SIGNED_IN, 200, Route.NO_BODY),
+            Route.self("PUT", "/api/v1/users/me/consents", Setup.SIGNED_IN, 200,
+                    actor -> "{\"type\":\"MARKETING\",\"granted\":true}"),
+            Route.self("GET", "/api/v1/users/me/data-requests", Setup.SIGNED_IN, 200, Route.NO_BODY),
+            Route.self("POST", "/api/v1/users/me/data-requests", Setup.SIGNED_IN, 201,
+                    actor -> "{\"type\":\"EXPORT\"}"),
+            Route.owned("GET", "/api/v1/users/me/data-requests/{requestId}/export", Setup.EXPORT_READY, "requestId",
+                    200),
+            Route.admin("GET", "/api/v1/admin/reports", 200, Route.NO_BODY),
+            Route.admin("POST", "/api/v1/admin/reports/{reportId}/decision", 204,
+                    actor -> "{\"decision\":\"DISMISSED\"}"),
+            Route.admin("POST", "/api/v1/admin/users/{userId}/suspend", 204, Route.NO_BODY),
+            Route.admin("POST", "/api/v1/admin/users/{userId}/reinstate", 204, Route.NO_BODY),
+            Route.admin("GET", "/api/v1/admin/audit", 200, Route.NO_BODY),
+            Route.admin("POST", "/api/v1/admin/audit/integrity-check", 200, Route.NO_BODY),
+            Route.admin("GET", "/api/v1/admin/data-requests", 200, Route.NO_BODY),
             Route.admin("GET", "/api/v1/admin/users/{userId}", 200, Route.NO_BODY),
             Route.admin("GET", "/api/v1/admin/verifications", 200, Route.NO_BODY),
             Route.admin("POST", "/api/v1/admin/verifications/{verificationId}/decision", 200, actor -> """
@@ -243,6 +259,9 @@ class EndpointAuthorizationMatrixIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbc;
+
+    @Autowired
+    private com.tripmate.compliance.service.DataRequestJob dataRequests;
 
     @Autowired
     @Qualifier("requestMappingHandlerMapping")
@@ -398,8 +417,12 @@ class EndpointAuthorizationMatrixIntegrationTest {
 
     private void checkAdmin(Route route) {
         Actor user = actor(Setup.SIGNED_IN);
-        String path = expand(route.path(), Map.of("userId", user.userId(),
+        Map<String, String> variables = new HashMap<>(Map.of("userId", user.userId(),
                 "verificationId", pendingSelfieOf(user.userId())));
+        if (route.path().contains("{reportId}")) {
+            variables.put("reportId", openReportBy(user.userId(), actor(Setup.SIGNED_IN).userId()));
+        }
+        String path = expand(route.path(), variables);
         assertRefusedAsAnonymous(route, path);
 
         assertForbidden(route, user.http(), path, user.accessToken(), "a user");
@@ -550,6 +573,13 @@ class EndpointAuthorizationMatrixIntegrationTest {
             }
             case LEDGER, LEDGER_SPENT, LEDGER_OWING, LEDGER_PAID_TO, LIVE_READY, LIVE_SHARING, SOS_RAISED, TRIP_ENDED ->
                     prepareLedger(setup, http, token, extras);
+            case EXPORT_READY -> {
+                HttpResponse<String> asked = http.postJson("/api/v1/users/me/data-requests", "{\"type\":\"EXPORT\"}",
+                        "Authorization", "Bearer " + token);
+                assertThat(asked.statusCode()).as(asked.body()).isEqualTo(201);
+                extras.put("requestId", JsonPath.read(asked.body(), "$.id"));
+                dataRequests.sweep();
+            }
             case CAN_VOUCH, VOUCHING -> {
                 verification.reachSelfieMatch(email, token);
                 LocalHttp friendHttp = new LocalHttp(port);
@@ -674,6 +704,13 @@ class EndpointAuthorizationMatrixIntegrationTest {
                     + "end_date = current_date - 2 where id = ?::uuid", tripId);
             default -> throw new IllegalArgumentException("Not a ledger setup: " + setup);
         }
+    }
+
+    /** An open report between two ordinary accounts, neither of them the admin deciding it. */
+    private String openReportBy(String reporterId, String reportedId) {
+        return jdbc.queryForObject("""
+                insert into reports (id, reporter_id, reported_id, reason) values (gen_random_uuid(), ?::uuid, ?::uuid,
+                'OTHER') returning id::text""", String.class, reporterId, reportedId);
     }
 
     /** A selfie in a pending selfie check: the admin routes only need it to exist. */
@@ -821,7 +858,9 @@ class EndpointAuthorizationMatrixIntegrationTest {
         /** As LEDGER, with an SOS raised by the owner; extra sosId. */
         SOS_RAISED,
         /** As LEDGER, the trip having ended two days ago, so its review window is open. */
-        TRIP_ENDED
+        TRIP_ENDED,
+        /** A data export requested and prepared; extra requestId. */
+        EXPORT_READY
     }
 
     /**
