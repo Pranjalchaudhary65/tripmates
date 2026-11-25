@@ -1311,7 +1311,8 @@ Trip lock gate (service-layer rule, cross-referencing `trip_members`,
 - **Safety job.** Every minute, per confirmed meet-up under
   `FOR UPDATE SKIP LOCKED`: 30 min after the start, an email to anyone
   neither checked in nor "safe"; 60 min, their emergency contact is alerted
-  (pluggable `EmergencyAlertSender`; the demo `mailbox` sender delivers the
+  (pluggable `EmergencyAlertSender`, now in identity and shared with live
+  trips; the demo `mailbox` sender delivers the
   alert text to the user's own inbox with the contact's number masked);
   90 min, a meet-up not completed becomes `NO_SHOW` and each person who did
   not arrive is a trust input. The other person is never told.
@@ -1617,6 +1618,51 @@ sos_events
   INDEX idx_sos_open (status) WHERE status <> 'RESOLVED'
     -- WHY: the on-call/admin safety dashboard polls exactly this set.
 ```
+
+**As built (live trip and safety).** What the safety module added or changed
+(`V19`), with the reason for each departure from the schema above:
+
+- **One emergency contact, really.** `itinerary_shares` keeps no copy of the
+  contact's name or phone; alerts read identity's `emergency_contacts`. It
+  holds the sharing itself instead: the check-in interval (3, 6, 12 or 24 h),
+  an optional note for the contact (AES-GCM under the traveller's key), and
+  when sharing started and stopped. Sharing needs a locked trip and an
+  emergency contact; stopping is free and cancels the waiting check-in.
+- **One alert sender.** `EmergencyAlertSender` and its demo `mailbox`
+  implementation moved from meet-up to `identity.emergency`, with a general
+  `situation` sentence, so meet-ups and live trips reach the contact the same
+  way and safety never imports meet-up. Selected by
+  `tripmate.identity.emergency-alert-sender` (`EMERGENCY_ALERT_SENDER`,
+  falling back to the older `MEETUP_ALERT_SENDER`).
+- **Check-ins.** One PENDING per traveller per trip (partial unique index).
+  Due one interval after sharing starts (or after the trip's first midnight,
+  IST); "I'm safe" answers it and schedules the next. The safety job emails
+  "are you safe?" when one comes due and, 60 minutes later, alerts the
+  emergency contact with the trip, the other travellers' first names, the
+  note and the last answered check-in's exact place, marks it `MISSED` and
+  schedules the next, so the net stays up. Nothing is scheduled after noon
+  on the day after the trip ends. Added `pinged_at`, `escalated_at` and a
+  `CANCELLED` status.
+- **Locations** are stored as two-decimal coordinates (about a kilometre,
+  CHECKed) with the geography point generated from them, as for trips, plus
+  the exact point sealed under the traveller's key and bound to its row.
+  Only an emergency alert opens the exact point. Other travellers see a
+  first name, whether they share, and when they last checked in: never a
+  location.
+- **SOS** (`client_sos_id` for retries, `alert_attempts`,
+  `escalated_at`): recorded and flagged for moderation (`SAFETY_SOS_RAISED`
+  outbox event) in one transaction, then alerted in another, so a failing SMS
+  gateway delays the alert (the job retries up to 10 times) but never loses
+  the SOS. Allowed to anyone on the trip, sharing or not, with or without an
+  emergency contact. Other travellers are not told: the threat may be one of
+  them. The traveller closes their own SOS with "I'm safe now".
+- **Free by construction.** The safety module has no trust input at all; a
+  test pins that it imports only identity, trips and the platform, names no
+  trust input, and that its one outbox publisher is the moderation flag,
+  taking only IDs.
+- **Conflict pre-mortem** lives in trips (which already depends on vibe), not
+  safety: `ConflictPremortem` with a rule-based default, comparing the caller
+  with each other traveller only, in fixed sentences with one question each.
 
 ### 8. Reviews & Trust Score
 
