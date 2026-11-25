@@ -153,9 +153,9 @@ Deadline: 2026-11-30.
 - [x] Integrity tests: confirm-without-marked-paid rejected, self-confirm rejected, concurrent confirms produce exactly one ledger pair
 
 ## Step 9b — Settlement frontend
-- [ ] Trip lock confirmation screen (reflects meetup-gated lock from 8d, no deposit step)
-- [ ] Settle-up screen: debt-simplified settlement list, "mark paid" / "confirm" actions, UPI deep-link button
-- [ ] Settlement/ledger history screen (obligations settled, not a wallet balance)
+- [x] Trip lock confirmation screen (reflects meetup-gated lock from 8d, no deposit step)
+- [x] Settle-up screen: debt-simplified settlement list, "mark paid" / "confirm" actions, UPI deep-link button
+- [x] Settlement/ledger history screen (obligations settled, not a wallet balance)
 
 ## Step 10a — Live Trip Mode & safety backend
 - [ ] itinerary_shares, checkins, sos_events tables

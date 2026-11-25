@@ -255,3 +255,11 @@ One line per commit: what I built, and the key decision behind it.
   REVOKE cannot restrict an owner; chose to re-plan under a per-trip lock
   after every write over storing one plan, so a late expense never leaves a
   stale payment on anyone's screen.
+- **Step 9b** — Built the settle-up screens: the meet-up lock shown as the
+  trip lock (no deposit step), balances, the fewest payments with a UPI
+  button for the payer, sent / received / dispute actions, an expense form
+  with equal or exact splits, reversals, a paged history and the UPI ID
+  page. Chose to accept a payment link only in the exact shape the server
+  builds, with its amount and payee checked against the row, over rendering
+  whatever href arrives, because that button is the one place a tampered
+  response could send someone's money elsewhere.
