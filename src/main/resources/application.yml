@@ -121,6 +121,9 @@ tripmate:
     max-current-trips: 10
     # Join requests one account may have waiting for an answer.
     max-pending-requests: 20
+    # Which ConflictPremortem lists the conversations a locked trip's
+    # travellers should have before leaving. "rule-based" needs no API key.
+    premortem: rule-based
     # Tries at an accept that keeps losing the trip's optimistic lock to
     # other changes on the same trip before it answers trip_busy.
     slot-claim-attempts: 5

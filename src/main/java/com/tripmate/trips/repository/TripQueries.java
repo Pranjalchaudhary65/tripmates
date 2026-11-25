@@ -244,6 +244,18 @@ public class TripQueries {
     }
 
     /** Whether an account can still take part: not suspended, banned or deleted. False for an unknown ID. */
+    /** First names by user ID, from user_public_facts; a missing user is simply absent. */
+    public Map<UUID, String> firstNames(Collection<UUID> userIds) {
+        Map<UUID, String> names = new HashMap<>();
+        if (!userIds.isEmpty()) {
+            jdbc.query("SELECT user_id, first_name FROM user_public_facts WHERE user_id IN (:ids)",
+                    new MapSqlParameterSource("ids", userIds),
+                    rs -> {
+                        names.put(rs.getObject("user_id", UUID.class), rs.getString("first_name"));
+                    });
+        }
+        return names;
+    }
     public boolean isActiveUser(UUID userId) {
         List<Boolean> rows = jdbc.queryForList("SELECT active FROM user_public_facts WHERE user_id = :user",
                 new MapSqlParameterSource("user", userId), Boolean.class);
