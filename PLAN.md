@@ -158,10 +158,10 @@ Deadline: 2026-11-30.
 - [x] Settlement/ledger history screen (obligations settled, not a wallet balance)
 
 ## Step 10a — Live Trip Mode & safety backend
-- [ ] itinerary_shares, checkins, sos_events tables
-- [ ] Scheduled "are you safe?" check-in job + missed-checkin escalation
-- [ ] SOS endpoint (last known location + buddy details + itinerary -> emergency contact)
-- [ ] AI Conflict Pre-mortem (rule-based default: flag large vibe-dimension deltas pre-trip)
+- [x] itinerary_shares, checkins, sos_events tables
+- [x] Scheduled "are you safe?" check-in job + missed-checkin escalation
+- [x] SOS endpoint (last known location + buddy details + itinerary -> emergency contact)
+- [x] AI Conflict Pre-mortem (rule-based default: flag large vibe-dimension deltas pre-trip)
 
 ## Step 10b — Safety frontend
 - [ ] Active trip dashboard: check-in prompts, SOS button, geofenced check-in UI

@@ -263,3 +263,12 @@ One line per commit: what I built, and the key decision behind it.
   builds, with its amount and payee checked against the row, over rendering
   whatever href arrives, because that button is the one place a tampered
   response could send someone's money elsewhere.
+- **Step 10a** — Built live trip mode: sharing a locked trip with the
+  emergency contact, scheduled "are you safe?" check-ins with missed
+  check-in escalation, SOS with the last exact location, and a rule-based
+  conflict pre-mortem. Chose to move the meet-up's alert sender into
+  identity over copying it, so there is one emergency contact and one way
+  to reach them and safety never imports meet-up; chose to commit an SOS
+  and its moderation flag before trying the alert, so a failing SMS gateway
+  can delay an alert but never lose the SOS; chose not to tell fellow
+  travellers about an SOS, because the threat may be one of them.
