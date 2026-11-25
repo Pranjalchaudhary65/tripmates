@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router';
 import { meetupApi, type CancellationType, type Match, type Meetup, type VenueOption } from '../api/meetupApi';
 import { toApiFailure, type ApiFailure } from '../api/problem';
 import { ErrorNotice } from '../components/ErrorNotice';
+import { ReportBlock } from '../components/ReportBlock';
 import { inputClassName } from '../components/FormField';
 import { useApiResource } from '../hooks/useApiResource';
 import { useSubmission } from '../hooks/useSubmission';
@@ -109,6 +110,9 @@ function MatchView({ initial }: { initial: Match }) {
             retrySecondsLeft={failure.retryAfterSeconds}
           />
         )}
+        <div className="border-t border-slate-200 pt-4">
+          <ReportBlock target={{ matchId: match.matchId }} firstName={other} />
+        </div>
       </div>
     </>
   );
@@ -170,6 +174,9 @@ function StageBody({ match, act, pending }: { match: Match; act: Runner; pending
             </Link>
             <Link to={`/trips/${match.trip.id}/live`} className="font-medium text-teal-700 underline">
               Live trip, check-ins and SOS
+            </Link>
+            <Link to={`/trips/${match.trip.id}/reviews`} className="font-medium text-teal-700 underline">
+              Reviews after the trip
             </Link>
           </div>
         </div>

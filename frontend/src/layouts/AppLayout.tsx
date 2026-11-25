@@ -73,6 +73,12 @@ function SessionNav() {
           <span className="ml-1 rounded-full bg-white px-1.5 text-xs font-semibold text-teal-800">{unread}</span>
         )}
       </NavLink>
+      <NavLink to="/reviews" className={navLinkClassName}>
+        Reviews
+      </NavLink>
+      <NavLink to="/account/trust-score" className={navLinkClassName}>
+        Trust score
+      </NavLink>
       <NavLink to="/vibe" end className={navLinkClassName}>
         My vibe
       </NavLink>

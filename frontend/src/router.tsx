@@ -6,6 +6,7 @@ import { ConversationPage } from './pages/ConversationPage';
 import { ConversationsPage } from './pages/ConversationsPage';
 import { AdminUserLookupPage } from './pages/AdminUserLookupPage';
 import { AdminVerificationQueuePage } from './pages/AdminVerificationQueuePage';
+import { BlockedPage } from './pages/BlockedPage';
 import { EmergencyContactPage } from './pages/EmergencyContactPage';
 import { HomePage } from './pages/HomePage';
 import { HostedTripsPage } from './pages/HostedTripsPage';
@@ -15,6 +16,7 @@ import { LiveTripPage } from './pages/LiveTripPage';
 import { LoginPage } from './pages/LoginPage';
 import { MatchPage } from './pages/MatchPage';
 import { NotFoundPage } from './pages/NotFoundPage';
+import { ReviewsPage } from './pages/ReviewsPage';
 import { RouteErrorPage } from './pages/RouteErrorPage';
 import { SecondFactorPage } from './pages/SecondFactorPage';
 import { SecurityPage } from './pages/SecurityPage';
@@ -24,6 +26,8 @@ import { TripBrowsePage } from './pages/TripBrowsePage';
 import { TripCreatePage } from './pages/TripCreatePage';
 import { TripDetailPage } from './pages/TripDetailPage';
 import { TripLedgerPage } from './pages/TripLedgerPage';
+import { TripReviewsPage } from './pages/TripReviewsPage';
+import { TrustScorePage } from './pages/TrustScorePage';
 import { UpiIdPage } from './pages/UpiIdPage';
 import { VerificationPage } from './pages/VerificationPage';
 import { VibeProfilePage } from './pages/VibeProfilePage';
@@ -70,6 +74,10 @@ export const routes: RouteObject[] = [
           { path: 'trips/:tripId/settle-up', element: <TripLedgerPage /> },
           { path: 'trips/:tripId/settle-up/history', element: <LedgerHistoryPage /> },
           { path: 'trips/:tripId/live', element: <LiveTripPage /> },
+          { path: 'trips/:tripId/reviews', element: <TripReviewsPage /> },
+          { path: 'reviews', element: <ReviewsPage /> },
+          { path: 'account/trust-score', element: <TrustScorePage /> },
+          { path: 'account/blocked', element: <BlockedPage /> },
           { path: 'messages', element: <ConversationsPage /> },
           { path: 'messages/:conversationId', element: <ConversationPage /> },
           { path: 'matches/:matchId', element: <MatchPage /> },
