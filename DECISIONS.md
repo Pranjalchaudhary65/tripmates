@@ -272,3 +272,10 @@ One line per commit: what I built, and the key decision behind it.
   and its moderation flag before trying the alert, so a failing SMS gateway
   can delay an alert but never lose the SOS; chose not to tell fellow
   travellers about an SOS, because the threat may be one of them.
+- **Step 10b** — Built the live trip dashboard: SOS behind one confirm tap
+  with 112 beside it, check-in prompts with "I'm safe" and the distance from
+  the destination, sharing controls, companions by name and last check-in,
+  and the pre-mortem before the trip starts. Chose to cap the wait for a
+  location at 5 seconds and send the SOS without one after that, over
+  waiting for a fix, because an SOS that never leaves the phone is worse
+  than one without coordinates.

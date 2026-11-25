@@ -164,8 +164,8 @@ Deadline: 2026-11-30.
 - [x] AI Conflict Pre-mortem (rule-based default: flag large vibe-dimension deltas pre-trip)
 
 ## Step 10b — Safety frontend
-- [ ] Active trip dashboard: check-in prompts, SOS button, geofenced check-in UI
-- [ ] Conflict pre-mortem display pre-trip
+- [x] Active trip dashboard: check-in prompts, SOS button, geofenced check-in UI
+- [x] Conflict pre-mortem display pre-trip
 
 ## Step 11a — Double-blind reviews + Trust Score Engine backend
 - [ ] reviews table (double-blind visibility logic)
