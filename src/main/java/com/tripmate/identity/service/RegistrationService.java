@@ -53,12 +53,15 @@ public class RegistrationService {
 
     private final TransactionTemplate transactions;
 
+    private final ConsentService consents;
+
     private final Clock clock;
 
     public RegistrationService(UserRepository users, OtpService otpService, PasswordPolicy passwordPolicy,
                                PasswordEncoder passwordEncoder, ApplicationEventPublisher events,
-                               PlatformTransactionManager transactionManager, Clock clock) {
+                               ConsentService consents, PlatformTransactionManager transactionManager, Clock clock) {
         this.users = users;
+        this.consents = consents;
         this.otpService = otpService;
         this.passwordPolicy = passwordPolicy;
         this.passwordEncoder = passwordEncoder;
@@ -105,6 +108,7 @@ public class RegistrationService {
             User user = users.saveAndFlush(User.register(registration.email(), registration.passwordHash(),
                     registration.fullName(), registration.request().dateOfBirth(),
                     registration.request().gender(), now));
+            consents.recordSignUp(user.getId(), now);
             return otpService.issueEmailVerification(user);
         }
 
@@ -118,6 +122,7 @@ public class RegistrationService {
         }
         user.replacePendingRegistration(registration.passwordHash(), registration.fullName(),
                 registration.request().dateOfBirth(), registration.request().gender(), now);
+        consents.recordSignUp(user.getId(), now);
         return otpService.issueEmailVerification(user);
     }
 

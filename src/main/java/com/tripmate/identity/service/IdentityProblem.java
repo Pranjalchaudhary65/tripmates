@@ -27,7 +27,11 @@ public enum IdentityProblem implements ProblemType {
      * that is already registered.
      */
     INVALID_VERIFICATION_CODE("invalid_verification_code",
-            "The verification code is invalid or has expired. Check the code or request a new one.", "code");
+            "The verification code is invalid or has expired. Check the code or request a new one.", "code"),
+
+    /** All 400s, like every other identity problem. */
+    CONSENT_NOT_OPTIONAL("consent_not_optional",
+            "The terms and privacy policy can only be withdrawn by deleting your account.", "type");
 
     private final String code;
 
