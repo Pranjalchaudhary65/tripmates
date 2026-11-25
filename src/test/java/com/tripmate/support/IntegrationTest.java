@@ -23,6 +23,7 @@ import java.lang.annotation.Target;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
 @Import({TestcontainersConfiguration.class, StubBreachedPasswords.class, StubCaptcha.class,
-        TestClockConfiguration.class, ProblemScenarioController.class, ProblemScenarioSecurity.class})
+        TestClockConfiguration.class, ProblemScenarioController.class, ProblemScenarioSecurity.class,
+        RecordingOutboxHandler.class})
 public @interface IntegrationTest {
 }

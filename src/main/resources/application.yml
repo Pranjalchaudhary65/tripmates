@@ -229,6 +229,40 @@ tripmate:
     job-interval: 1m
     job-batch: 100
 
+  outbox:
+    # The relay that hands outbox events to the modules reacting to them.
+    relay-interval: 5s
+    max-per-run: 500
+    # An event whose delivery has failed this many times is set aside as dead.
+    max-attempts: 10
+
+  trust:
+    read-limit:
+      capacity: 120
+      period: 10m
+    write-limit:
+      capacity: 30
+      period: 1h
+    job-interval: 1m
+    job-batch: 200
+    # Inputs fade with age, so a score is recomputed at least this often.
+    refresh-after: 1d
+    # Travellers can review each other for this long after a trip ends; a
+    # review still hidden when it closes becomes visible on its own.
+    review-window: 14d
+
+  moderation:
+    write-limit:
+      capacity: 30
+      period: 1h
+    read-limit:
+      capacity: 60
+      period: 10m
+    # This many different people reporting one account within the window
+    # suspends it until a moderator looks. Never fewer than 2.
+    auto-suspend-reporters: 3
+    auto-suspend-window: 30d
+
   matching:
     # Which MatchScorer computes the soft score. "rule-based" (the default) is a
     # fixed weighted comparison that needs no API key. Deal-breakers are hard
