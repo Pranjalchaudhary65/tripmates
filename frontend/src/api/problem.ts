@@ -123,6 +123,17 @@ const SERVER_WORDED_CODES: ReadonlySet<string> = new Set([
   'not_sharing',
   'invalid_check_in_interval',
   'invalid_note',
+  'invalid_rating',
+  'invalid_comment',
+  'not_a_travel_companion',
+  'trip_not_reviewable',
+  'review_window_not_open',
+  'review_window_closed',
+  'already_reviewed',
+  'invalid_target',
+  'invalid_reason',
+  'invalid_details',
+  'already_reported',
 ]);
 
 /**
