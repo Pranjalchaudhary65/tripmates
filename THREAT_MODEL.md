@@ -199,6 +199,19 @@ lock).
 | A tampered or buggy response shows a score its breakdown does not explain, or a review the double-blind should still hide | The client's strict reader refuses a breakdown whose points are not value × weight or do not add up to the score, a deduction type the formula does not have, and any review of the user shown while the user's own is still hidden; the screen then shows a generic error | `frontend/src/api/trustApi.ts`, `trustApi.test.ts` |
 | A report or block sent by mistake | Folded away until asked for; block needs a confirm step, report needs a chosen reason; neither reveals anything about the other person's outcome | `frontend/src/components/ReportBlock.tsx`, `trustPages.test.tsx` |
 | Report details read by anyone with database access | Sealed under the reporter's data key, bound to the report ID | `EncryptedField.REPORT_DETAILS`, `ModerationService` |
+## Compliance, audit and administration
+
+| Threat | Mitigation | Where |
+|---|---|---|
+| An insider or attacker with database access edits or deletes audit history | Append-only trigger for every role; each row hashed over the previous row's hash, filled by a trigger under an advisory lock; a daily check recomputes every hash in Java and records and logs the first break | `V23__create_compliance.sql`, `platform.audit.AuditIntegrity`, `ComplianceIntegrationTest` |
+| The audit log keeps personal data after the person deletes their account | Metadata accepts only IDs, codes and numbers (`AuditLog` refuses anything else); no IP, name or email columns | `platform.audit.AuditLog` |
+| A stolen session deletes someone's account | Deletion needs the account password again, the same refusal for any wrong password | `AccountDeletion.requirePassword` |
+| Deleted data survives in encrypted columns or exports | Every data key is shredded, so every value sealed under it (messages, phone, notes, locations, report details, waiting exports) is unreadable; plaintext identifiers are scrubbed from the user row | `AccountDeletion`, `DataRequestJob` |
+| Someone downloads another person's export, or an export leaks through storage links | Export is the requester's only (404 otherwise), sealed under their key in the database, never in object storage or behind a media link; cleared after 7 days; `Cache-Control: no-store` | `DataRequestService`, `DataRequestController` |
+| An export reveals what the double-blind or the comfort rating must hide, or secrets | Each module exports only its own data: received reviews only once visible, rounded safety points only, no comfort rating, no password hash, TOTP secret, blind index or other people's messages | `*PersonalData` contributors |
+| An email or phone number ends up in logs by accident | Every string field of every structured log line is masked; tested end to end | `PiiMaskingLogCustomizer`, `ComplianceIntegrationTest` |
+| A moderator abuses their role on their own case or account | A moderator cannot decide a report they are part of (also a DB CHECK) or suspend themselves; every decision is audited; admin routes need ADMIN with a second factor, re-checked against the database | `AdminModerationService`, `ck_reports_reviewer_not_party`, `AdminGuard` |
+| A racing duplicate request produces a 500 instead of the right answer | Unique-index violations are recognised from plain JDBC as well as Hibernate | `platform.error.Constraints` |
 ## Explicitly out of scope / accepted risk (document, don't silently skip)
 
 - Real UPI payment initiation — settlements record a *confirmed outcome*
