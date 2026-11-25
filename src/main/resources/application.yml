@@ -263,6 +263,26 @@ tripmate:
     auto-suspend-reporters: 3
     auto-suspend-window: 30d
 
+  consent:
+    # The published version of each policy; accepting a new one records a new consent row.
+    tos: 2026-09
+    privacy-policy: 2026-09
+    location-sharing: 2026-09
+    marketing: 2026-09
+
+  compliance:
+    request-limit:
+      capacity: 10
+      period: 1h
+    # A finished export can be downloaded for this long, then it is cleared.
+    export-ttl: 7d
+    job-interval: 1m
+    max-attempts: 5
+
+  audit:
+    # How often the whole audit hash chain is recomputed and checked.
+    integrity-interval: 1d
+
   matching:
     # Which MatchScorer computes the soft score. "rule-based" (the default) is a
     # fixed weighted comparison that needs no API key. Deal-breakers are hard
@@ -473,6 +493,9 @@ logging:
       # top-level fields, which is how correlationId lands on every line
       # written while a request is being handled.
       console: ecs
+    json:
+      # Masks emails and phone numbers in every log line; see PiiMaskingLogCustomizer.
+      customizer: com.tripmate.platform.logging.PiiMaskingLogCustomizer
 
 springdoc:
   # Pinned explicitly - SecurityConfig permits exactly these paths, so they

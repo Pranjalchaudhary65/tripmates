@@ -109,6 +109,14 @@ tripmate:
     # its user sits in a queue other tests filled.
     job-batch: 100000
 
+  compliance:
+    # Tests run the data request job themselves.
+    job-interval: 1000d
+
+  audit:
+    # Tests run the integrity check themselves.
+    integrity-interval: 1000d
+
   storage:
     # Under target/, so a test run never writes into the real uploads/.
     local-root: target/test-uploads
