@@ -8,6 +8,8 @@ import com.tripmate.identity.service.UserBlocks;
 import com.tripmate.identity.service.UserBlocks.BlockView;
 import com.tripmate.identity.token.SessionPrincipal;
 import com.tripmate.moderation.repository.ReportQueries;
+import com.tripmate.platform.audit.AuditEvent;
+import com.tripmate.platform.audit.AuditLog;
 import com.tripmate.platform.error.ApiProblemException;
 import com.tripmate.platform.error.CommonProblem;
 import com.tripmate.platform.error.Constraints;
@@ -24,6 +26,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -72,12 +75,15 @@ public class ModerationService {
 
     private final TransactionTemplate transactions;
 
+    private final AuditLog audit;
+
     private final Clock clock;
 
     public ModerationService(TripContacts contacts, UserBlocks blocks, AccountModeration accounts,
                              AccountService accountService, ReportQueries reports, UserDataCipher cipher,
-                             RateLimiter rateLimiter, ModerationProperties properties,
+                             RateLimiter rateLimiter, ModerationProperties properties, AuditLog audit,
                              PlatformTransactionManager transactionManager, Clock clock) {
+        this.audit = audit;
         this.contacts = contacts;
         this.blocks = blocks;
         this.accounts = accounts;
@@ -140,9 +146,10 @@ public class ModerationService {
                 byte[] sealed = details == null ? null : cipher.seal(me, EncryptedField.REPORT_DETAILS,
                         "report:" + id, details.getBytes(StandardCharsets.UTF_8));
                 reports.insert(id, me, contact.userId(), contact.tripId(), reason.name(), sealed, now);
+                audit.record(me, AuditEvent.REPORT_FILED, "REPORT", id, Map.of("reason", reason.name()));
                 if (reports.distinctReportersSince(contact.userId(), now.minus(properties.autoSuspendWindow()))
                         >= properties.autoSuspendReporters()) {
-                    accounts.suspend(contact.userId());
+                    accounts.suspend(contact.userId(), null);
                 }
                 return new ReportView(id, reason, now);
             }));

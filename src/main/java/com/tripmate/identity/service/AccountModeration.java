@@ -3,12 +3,15 @@ package com.tripmate.identity.service;
 import com.tripmate.identity.entity.SessionRevocationReason;
 import com.tripmate.identity.entity.User;
 import com.tripmate.identity.repository.UserRepository;
+import com.tripmate.platform.audit.AuditEvent;
+import com.tripmate.platform.audit.AuditLog;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -31,12 +34,16 @@ public class AccountModeration {
 
     private final VouchService vouches;
 
+    private final AuditLog audit;
+
     private final Clock clock;
 
-    public AccountModeration(UserRepository users, SessionService sessions, VouchService vouches, Clock clock) {
+    public AccountModeration(UserRepository users, SessionService sessions, VouchService vouches, AuditLog audit,
+                             Clock clock) {
         this.users = users;
         this.sessions = sessions;
         this.vouches = vouches;
+        this.audit = audit;
         this.clock = clock;
     }
 
@@ -51,28 +58,34 @@ public class AccountModeration {
         return users.findByIdForUpdate(userId).isPresent();
     }
 
-    /** @return true when the account was active and is now suspended */
+    /**
+     * @param actorId the moderator, or null when the report threshold did it
+     * @return true when the account was active and is now suspended
+     */
     @Transactional(propagation = Propagation.MANDATORY)
-    public boolean suspend(UUID userId) {
+    public boolean suspend(UUID userId, UUID actorId) {
         Instant now = clock.instant();
         User user = users.findByIdForUpdate(userId).orElse(null);
         if (user == null || !user.suspend(now)) {
             return false;
         }
         users.saveAndFlush(user);
-        vouches.penalizeVouchersOf(userId);
+        int penalised = vouches.penalizeVouchersOf(userId);
+        audit.record(actorId, AuditEvent.ACCOUNT_SUSPENDED, "USER", userId,
+                Map.of("by", actorId == null ? "REPORT_THRESHOLD" : "MODERATOR", "vouchersPenalised", penalised));
         sessions.revokeEverySession(userId, SessionRevocationReason.ADMIN);
         return true;
     }
 
     /** @return true when the account was suspended and is active again */
     @Transactional(propagation = Propagation.MANDATORY)
-    public boolean reinstate(UUID userId) {
+    public boolean reinstate(UUID userId, UUID actorId) {
         User user = users.findByIdForUpdate(userId).orElse(null);
         if (user == null || !user.reinstate(clock.instant())) {
             return false;
         }
         users.saveAndFlush(user);
+        audit.record(actorId, AuditEvent.ACCOUNT_REINSTATED, "USER", userId);
         return true;
     }
 

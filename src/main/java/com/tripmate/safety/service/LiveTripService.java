@@ -1,5 +1,7 @@
 package com.tripmate.safety.service;
 
+import com.tripmate.platform.audit.AuditEvent;
+import com.tripmate.platform.audit.AuditLog;
 import com.tripmate.identity.crypto.EncryptedField;
 import com.tripmate.identity.crypto.UserDataCipher;
 import com.tripmate.identity.service.AccountService;
@@ -100,13 +102,16 @@ public class LiveTripService {
 
     private final TransactionTemplate reading;
 
+    private final AuditLog audit;
+
     private final Clock clock;
 
     public LiveTripService(AccountService accounts, TripCrew crews, EmergencyContactService emergencyContacts,
                            ItineraryShareRepository shares, CheckinRepository checkins,
                            SosEventRepository sosEvents, SafetyQueries queries, SafetyAlerts alerts,
                            SafetyModerationEvents moderation, UserDataCipher cipher, RateLimiter rateLimiter,
-                           SafetyProperties properties, PlatformTransactionManager transactionManager, Clock clock) {
+                           SafetyProperties properties, PlatformTransactionManager transactionManager, Clock clock, AuditLog audit) {
+        this.audit = audit;
         this.accounts = accounts;
         this.crews = crews;
         this.emergencyContacts = emergencyContacts;
@@ -244,6 +249,7 @@ public class LiveTripService {
                     EncryptedField.SOS_LOCATION, Locations.sosContext(me, clientSosId), location);
             SosEvent sos = sosEvents.save(SosEvent.raise(tripId, me, clientSosId, sealed, clock.instant()));
             moderation.sosRaised(sos.getId(), tripId, me);
+            audit.record(me, AuditEvent.SOS_RAISED, "SOS", sos.getId());
             return sos.getId();
         });
         deliverSos(sosId);

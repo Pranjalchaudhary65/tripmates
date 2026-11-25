@@ -1,5 +1,7 @@
 package com.tripmate.settlement.service;
 
+import com.tripmate.platform.audit.AuditEvent;
+import com.tripmate.platform.audit.AuditLog;
 import com.tripmate.identity.service.AccountService;
 import com.tripmate.identity.service.UpiIdService;
 import com.tripmate.identity.token.SessionPrincipal;
@@ -137,13 +139,16 @@ public class LedgerService {
 
     private final TransactionTemplate reading;
 
+    private final AuditLog audit;
+
     private final Clock clock;
 
     public LedgerService(AccountService accounts, TripCrew crews, UpiIdService upiIds,
                          SettlementRepository settlements, SettlementTransitionRepository transitions,
                          LedgerTransactionRepository ledger, LedgerEntryRepository legs, SettlementQueries queries,
                          OutboxPublisher outbox, RateLimiter rateLimiter, SettlementProperties properties,
-                         PlatformTransactionManager transactionManager, Clock clock) {
+                         PlatformTransactionManager transactionManager, Clock clock, AuditLog audit) {
+        this.audit = audit;
         this.accounts = accounts;
         this.crews = crews;
         this.upiIds = upiIds;
@@ -316,6 +321,8 @@ public class LedgerService {
                 case MARKED_PAID -> {
                     settlement.confirm(now);
                     change(settlement, SettlementStatus.MARKED_PAID, Reason.CONFIRMED, me, now);
+                    audit.record(me, AuditEvent.SETTLEMENT_CONFIRMED, "SETTLEMENT",
+                            settlement.getId(), Map.of("amountPaise", settlement.getAmountPaise()));
                     LedgerTransaction paid = ledger.save(LedgerTransaction.settlement(settlement, now));
                     legs.save(LedgerEntry.leg(paid, settlement.getFromUserId(), EntryType.DEBIT,
                             settlement.getAmountPaise()));

@@ -1,5 +1,7 @@
 package com.tripmate.identity.service;
 
+import com.tripmate.platform.audit.AuditEvent;
+import com.tripmate.platform.audit.AuditLog;
 import com.tripmate.identity.entity.IdentityVerification;
 import com.tripmate.identity.entity.User;
 import com.tripmate.identity.entity.VerificationStatus;
@@ -44,11 +46,14 @@ public class AdminVerificationService {
 
     private final TrustInputEvents trustInputs;
 
+    private final AuditLog audit;
+
     private final Clock clock;
 
     public AdminVerificationService(AdminGuard adminGuard, IdentityVerificationRepository verifications,
                                     UserRepository users, SignedMediaUrls mediaUrls, TrustInputEvents trustInputs,
-                                    Clock clock) {
+                                    Clock clock, AuditLog audit) {
+        this.audit = audit;
         this.adminGuard = adminGuard;
         this.verifications = verifications;
         this.users = users;
@@ -91,6 +96,8 @@ public class AdminVerificationService {
         }
         Instant now = clock.instant();
         verification.decide(approve, reviewer.getId(), now);
+        audit.record(reviewer.getId(), AuditEvent.ADMIN_VERIFICATION_DECIDED,
+                "VERIFICATION", verificationId, Map.of("decision", approve ? "APPROVE" : "REJECT"));
         if (approve && owner.isActive() && owner.getIdVerificationTier() != VerificationTier.SELFIE_MATCH) {
             VerificationTier before = owner.markSelfieMatched(now);
             trustInputs.tierChanged(owner.getId(), before, owner.getIdVerificationTier());
