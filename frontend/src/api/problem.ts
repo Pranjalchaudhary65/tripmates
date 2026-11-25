@@ -101,6 +101,23 @@ const SERVER_WORDED_CODES: ReadonlySet<string> = new Set([
   'feedback_not_open',
   'feedback_given',
   'emergency_contact_is_you',
+  'invalid_upi_id',
+  'ledger_not_open',
+  'not_on_trip',
+  'invalid_description',
+  'invalid_amount',
+  'participant_not_on_trip',
+  'invalid_split',
+  'split_needs_someone_else',
+  'expense_id_reused',
+  'not_your_expense',
+  'not_an_expense',
+  'not_the_payer',
+  'not_the_payee',
+  'cannot_confirm_own_payment',
+  'not_marked_paid',
+  'not_a_party',
+  'settlement_closed',
 ]);
 
 /**
