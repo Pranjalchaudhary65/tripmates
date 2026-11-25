@@ -289,3 +289,11 @@ One line per commit: what I built, and the key decision behind it.
   input and the automatic report on a safety cancellation, because one
   would punish not replying to someone you want to avoid and the other
   would show moderators the private comfort rating.
+- **Step 11b** — Built the trust score page (each part's value, weight and
+  points, the deductions in words, and what is never counted), the reviews
+  inbox, the double-blind review screen per trip, report and block on the
+  match page and per fellow traveller, and the blocked people list. Chose
+  to refuse a breakdown that doesn't add up to its own score over showing
+  it, so the explanation can never disagree with the number, and to fold
+  report and block away behind a deliberate step so neither is pressed by
+  accident.

@@ -175,9 +175,9 @@ Deadline: 2026-11-30.
 - [x] Block/report + auto-suspend thresholds
 
 ## Step 11b — Reviews/Trust frontend
-- [ ] Review submission screen (double-blind, no peeking until both submit)
-- [ ] Trust score profile page (component breakdown)
-- [ ] Report & block UI
+- [x] Review submission screen (double-blind, no peeking until both submit)
+- [x] Trust score profile page (component breakdown)
+- [x] Report & block UI
 
 ## Step 12a — Compliance & audit backend
 - [ ] audit_log hash chain + integrity-check scheduler
