@@ -144,13 +144,13 @@ Deadline: 2026-11-30.
 - [x] "This match didn't proceed" generic decline screen (no reason shown, either direction)
 
 ## Step 9a — Trip Lock + Settlement backend
-- [ ] ledger_entries (append-only, no UPDATE/DELETE grants), settlements,
+- [x] ledger_entries (append-only, no UPDATE/DELETE grants), settlements,
       settlement_state_transitions, idempotency key handling — no wallets, no custody
-- [ ] Debt simplification algorithm (pure function, property-tested: conservation, correctness, ≤N-1 settlements)
-- [ ] Settlement state machine service (PROPOSED/MARKED_PAID/CONFIRMED/DISPUTED) — only payee's CONFIRM writes the ledger
-- [ ] UPI deep-link generation from payee's self-declared upi_vpa (nullable, graceful fallback to "ask in chat")
-- [ ] Trip lock transition now driven by Step 8c's meetup gate, not escrow deposit
-- [ ] Integrity tests: confirm-without-marked-paid rejected, self-confirm rejected, concurrent confirms produce exactly one ledger pair
+- [x] Debt simplification algorithm (pure function, property-tested: conservation, correctness, ≤N-1 settlements)
+- [x] Settlement state machine service (PROPOSED/MARKED_PAID/CONFIRMED/DISPUTED) — only payee's CONFIRM writes the ledger
+- [x] UPI deep-link generation from payee's self-declared upi_vpa (nullable, graceful fallback to "ask in chat")
+- [x] Trip lock transition now driven by Step 8c's meetup gate, not escrow deposit
+- [x] Integrity tests: confirm-without-marked-paid rejected, self-confirm rejected, concurrent confirms produce exactly one ledger pair
 
 ## Step 9b — Settlement frontend
 - [ ] Trip lock confirmation screen (reflects meetup-gated lock from 8d, no deposit step)

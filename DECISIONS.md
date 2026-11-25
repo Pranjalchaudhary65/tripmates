@@ -245,3 +245,13 @@ One line per commit: what I built, and the key decision behind it.
   windows in the time picker over a free time input, and to search venues
   near the trip, a city, or halfway between two cities picked by the user,
   so no one's home location is ever sent or stored.
+- **Step 9a** — Built the shared trip ledger and settle-up on top of the
+  meet-up lock: expenses as double-entry transactions in whole paise,
+  reversals for corrections, debt simplification into at most N-1 payments,
+  UPI links built for the payer, and only the payee's confirmation writing
+  a payment. Chose to hold double entry and append-only in the database
+  (deferred balance trigger, refusing UPDATE/DELETE triggers) over trusting
+  the service alone, because the app connects as the table owner and a
+  REVOKE cannot restrict an owner; chose to re-plan under a per-trip lock
+  after every write over storing one plan, so a late expense never leaves a
+  stale payment on anyone's screen.
