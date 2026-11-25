@@ -297,3 +297,12 @@ One line per commit: what I built, and the key decision behind it.
   it, so the explanation can never disagree with the number, and to fold
   report and block away behind a deliberate step so neither is pressed by
   accident.
+- **Step 12a** — Built the hash-chained audit log with a daily integrity
+  check, consent records, data export and account deletion, PII masking in
+  logs, and the admin report queue, decisions and suspensions. Chose to let
+  a database trigger chain each audit row under an advisory lock over
+  hashing in the service, so no caller can pick a hash or race another onto
+  the same previous row, and to check it by recomputing every hash in Java.
+  Chose to seal exports into the database under the user's own key over
+  writing files, so deleting the account destroys a waiting export too and
+  no export can ever be served through a media link.

@@ -180,9 +180,9 @@ Deadline: 2026-11-30.
 - [x] Report & block UI
 
 ## Step 12a — Compliance & audit backend
-- [ ] audit_log hash chain + integrity-check scheduler
-- [ ] consent_records, data_requests (export + soft-delete/crypto-shred deletion)
-- [ ] PII masking in logs verified end-to-end
+- [x] audit_log hash chain + integrity-check scheduler
+- [x] consent_records, data_requests (export + soft-delete/crypto-shred deletion)
+- [x] PII masking in logs verified end-to-end
 
 ## Step 12b — Admin moderation panel frontend
 - [ ] Admin moderation panel: verification queue, reports, audit log view, data requests
