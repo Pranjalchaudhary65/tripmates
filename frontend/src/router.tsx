@@ -11,6 +11,7 @@ import { HomePage } from './pages/HomePage';
 import { HostedTripsPage } from './pages/HostedTripsPage';
 import { JoinRequestsPage } from './pages/JoinRequestsPage';
 import { LedgerHistoryPage } from './pages/LedgerHistoryPage';
+import { LiveTripPage } from './pages/LiveTripPage';
 import { LoginPage } from './pages/LoginPage';
 import { MatchPage } from './pages/MatchPage';
 import { NotFoundPage } from './pages/NotFoundPage';
@@ -68,6 +69,7 @@ export const routes: RouteObject[] = [
           { path: 'trips/:tripId', element: <TripDetailPage /> },
           { path: 'trips/:tripId/settle-up', element: <TripLedgerPage /> },
           { path: 'trips/:tripId/settle-up/history', element: <LedgerHistoryPage /> },
+          { path: 'trips/:tripId/live', element: <LiveTripPage /> },
           { path: 'messages', element: <ConversationsPage /> },
           { path: 'messages/:conversationId', element: <ConversationPage /> },
           { path: 'matches/:matchId', element: <MatchPage /> },

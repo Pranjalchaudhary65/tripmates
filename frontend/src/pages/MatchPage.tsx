@@ -168,6 +168,9 @@ function StageBody({ match, act, pending }: { match: Match; act: Runner; pending
             <Link to={`/trips/${match.trip.id}/settle-up`} className="font-medium text-teal-700 underline">
               Shared expenses and settle-up
             </Link>
+            <Link to={`/trips/${match.trip.id}/live`} className="font-medium text-teal-700 underline">
+              Live trip, check-ins and SOS
+            </Link>
           </div>
         </div>
       );

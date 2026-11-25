@@ -123,6 +123,9 @@ function LedgerView({ initial }: { initial: Ledger }) {
             <Link to="/account/upi-id" className="font-medium text-teal-700 underline">
               Your UPI ID
             </Link>
+            <Link to={`/trips/${ledger.trip.id}/live`} className="font-medium text-teal-700 underline">
+              Live trip and SOS
+            </Link>
           </nav>
         </>
       )}
