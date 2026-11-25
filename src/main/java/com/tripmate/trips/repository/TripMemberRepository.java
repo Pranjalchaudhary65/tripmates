@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -34,4 +35,8 @@ public interface TripMemberRepository extends Repository<TripMember, UUID> {
 
     @Query("select count(m) from TripMember m where m.tripId = :trip and m.status = :status")
     long countByTripAndStatus(@Param("trip") UUID tripId, @Param("status") MemberStatus status);
+
+    /** Every companion who was ever locked in on the trip, in the order they were; served by idx_trip_members_trip_status. */
+    @Query("select m from TripMember m where m.tripId = :trip and m.lockedAt is not null order by m.lockedAt, m.id")
+    List<TripMember> findEverLockedByTrip(@Param("trip") UUID tripId);
 }
