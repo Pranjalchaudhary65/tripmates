@@ -32,7 +32,10 @@ public enum EncryptedField {
     SOS_LOCATION("sos_events.last_known_location_ciphertext"),
 
     /** What a reporter wrote about the person they reported; read only by a moderator. */
-    REPORT_DETAILS("reports.details_ciphertext");
+    REPORT_DETAILS("reports.details_ciphertext"),
+
+    /** A finished data export, waiting to be downloaded by the user it is about. */
+    DATA_EXPORT("data_requests.export_ciphertext");
 
     private final String column;
 
