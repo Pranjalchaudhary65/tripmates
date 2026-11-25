@@ -186,10 +186,6 @@ tripmate:
     job-interval: 1m
     job-batch: 100
     max-location-accuracy-meters: 150
-    # "mailbox" sends the alert text to the user's own inbox instead of an
-    # SMS to the contact, so the demo needs no SMS account. A real gateway
-    # registers its own EmergencyAlertSender; an unknown value stops startup.
-    alert-sender: ${MEETUP_ALERT_SENDER:mailbox}
 
   settlement:
     # Per account: expenses, reversals and settlement actions together; and
@@ -236,6 +232,12 @@ tripmate:
     unavailable-retry-after: 30s
 
   identity:
+    # Who delivers emergency contact alerts, for every safety path (meet-ups,
+    # missed trip check-ins, SOS). "mailbox" sends the alert text to the
+    # user's own inbox instead of an SMS to the contact, so the demo needs no
+    # SMS account. A real gateway registers its own EmergencyAlertSender; an
+    # unknown value stops startup. MEETUP_ALERT_SENDER is the older name.
+    emergency-alert-sender: ${EMERGENCY_ALERT_SENDER:${MEETUP_ALERT_SENDER:mailbox}}
     breached-password:
       base-url: https://api.pwnedpasswords.com
       timeout: 3s

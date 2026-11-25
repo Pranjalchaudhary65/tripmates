@@ -1,5 +1,6 @@
 package com.tripmate.meetup.service;
 
+import com.tripmate.identity.emergency.EmergencyAlertSender;
 import com.tripmate.identity.service.ContactDirectory;
 import com.tripmate.identity.service.EmergencyContactService;
 import com.tripmate.meetup.entity.Meetup;
@@ -17,8 +18,10 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
+import java.time.format.DateTimeFormatter;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 /**
@@ -43,6 +46,8 @@ import java.util.UUID;
 public class MeetupSafetyJob {
 
     private static final Logger log = LoggerFactory.getLogger(MeetupSafetyJob.class);
+
+    private static final DateTimeFormatter ALERT_TIME = DateTimeFormatter.ofPattern("d MMM, h:mm a", Locale.ENGLISH);
 
     private final MeetupRepository meetups;
 
@@ -136,8 +141,11 @@ public class MeetupSafetyJob {
         var account = contacts.contactOf(person.getUserId());
         var contact = emergencyContacts.forAlert(person.getUserId());
         if (account.isPresent() && contact.isPresent()) {
-            alerts.send(contact.get(), new EmergencyAlertSender.Alert(firstName(person.getUserId()),
-                    account.get().email(), meetup.getVenueName(), venue.getAddress(), meetup.getScheduledAt()));
+            String name = firstName(person.getUserId());
+            alerts.send(contact.get(), new EmergencyAlertSender.Alert(name, account.get().email(),
+                    "%s planned to meet someone at %s (%s) at %s and has not checked in or answered us.".formatted(
+                            name, meetup.getVenueName(), venue.getAddress(),
+                            ALERT_TIME.format(meetup.getScheduledAt().atZone(venue.getZone())))));
             meetup.recordEmergencyContactNotified(now);
             meetups.save(meetup);
         } else {

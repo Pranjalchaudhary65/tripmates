@@ -29,6 +29,7 @@ tripmate:
   cors:
     allowed-origins: http://localhost:5173
   identity:
+    emergency-alert-sender: mailbox
     breached-password:
       # Tests replace the HIBP checker with a stub; this points the real one
       # at the discard port anyway, so a wiring mistake fails fast instead of
@@ -86,7 +87,6 @@ tripmate:
   meetup:
     # Tests run the safety and purge jobs themselves, against the shared clock.
     job-interval: 1000d
-    alert-sender: mailbox
 
   settlement:
     # Tests run the overdue sweep themselves, against the shared clock.

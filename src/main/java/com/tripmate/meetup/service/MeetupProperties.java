@@ -29,7 +29,6 @@ import java.util.Objects;
  * @param jobInterval         how often the safety and purge jobs run
  * @param jobBatch            meet-ups or selfies one job run handles at most
  * @param maxLocationAccuracyMeters a reported location rougher than this cannot check in
- * @param alertSender         which EmergencyAlertSender delivers alerts
  */
 @ConfigurationProperties("tripmate.meetup")
 public record MeetupProperties(RateLimit writeLimit, RateLimit readLimit, double venueRadiusKm,
@@ -37,7 +36,7 @@ public record MeetupProperties(RateLimit writeLimit, RateLimit readLimit, double
                                int windowDays, Duration checkinOpensBefore, Duration checkinClosesAfter,
                                Duration pingAfter, Duration escalateAfter, int comfortThreshold,
                                Duration lateCancelWithin, Duration selfieRetention, Duration jobInterval, int jobBatch,
-                               double maxLocationAccuracyMeters, String alertSender) {
+                               double maxLocationAccuracyMeters) {
 
     /** The geofence: a check-in counts only within this many metres of the venue. */
     public static final int GEOFENCE_METERS = 100;

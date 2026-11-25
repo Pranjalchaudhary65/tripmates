@@ -78,7 +78,6 @@ class DaylightRulesTest {
         RateLimit limit = new RateLimit(100, Duration.ofHours(1));
         return new MeetupProperties(limit, limit, 25, Duration.ofHours(1), Duration.ofHours(2), Duration.ofHours(3),
                 Duration.ofDays(30), 14, Duration.ofMinutes(30), Duration.ofMinutes(90), Duration.ofMinutes(30),
-                Duration.ofMinutes(60), 3, Duration.ofHours(24), Duration.ofDays(7), Duration.ofMinutes(1), 100, 150,
-                "mailbox");
+                Duration.ofMinutes(60), 3, Duration.ofHours(24), Duration.ofDays(7), Duration.ofMinutes(1), 100, 150);
     }
 }
