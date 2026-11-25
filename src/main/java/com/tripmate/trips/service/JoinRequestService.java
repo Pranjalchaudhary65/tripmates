@@ -109,7 +109,8 @@ public class JoinRequestService {
             if (members.findByTripIdAndUserId(tripId, userId).isPresent()) {
                 throw new ApiProblemException(TripProblem.JOIN_REQUEST_EXISTS);
             }
-            if (!trip.getStatus().isListed() || !queries.isActiveUser(trip.getHostUserId())) {
+            if (!trip.getStatus().isListed() || !queries.isActiveUser(trip.getHostUserId())
+                    || queries.blockedBetween(userId, trip.getHostUserId())) {
                 throw notFound();
             }
             requireTakingCompanions(trip, TripCalendar.today(clock));

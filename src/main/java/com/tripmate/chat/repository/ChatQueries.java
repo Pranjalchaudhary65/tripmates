@@ -88,6 +88,13 @@ public class ChatQueries {
                 (rs, row) -> card(rs)).stream().findFirst();
     }
 
+    /** Whether either of the two has blocked the other, from the view identity publishes. */
+    public boolean blockedBetween(UUID one, UUID other) {
+        return Boolean.TRUE.equals(jdbc.queryForObject("""
+                SELECT EXISTS (SELECT 1 FROM user_block_facts WHERE user_id = :one AND other_user_id = :other)""",
+                new MapSqlParameterSource("one", one).addValue("other", other), Boolean.class));
+    }
+
     /** Whether the account is still active; false for one that does not exist. */
     public boolean isActiveUser(UUID userId) {
         return Boolean.TRUE.equals(jdbc.query("SELECT active FROM user_public_facts WHERE user_id = :id",

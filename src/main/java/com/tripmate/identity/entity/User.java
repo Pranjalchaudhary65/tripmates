@@ -134,6 +134,34 @@ public class User {
         return accountStatus == AccountStatus.ACTIVE && deletedAt == null;
     }
 
+    /**
+     * Suspends an active account pending a moderator's review.
+     *
+     * @return false when it was not active, so nothing changed
+     */
+    public boolean suspend(Instant now) {
+        if (!isActive()) {
+            return false;
+        }
+        accountStatus = AccountStatus.SUSPENDED;
+        updatedAt = now;
+        return true;
+    }
+
+    /**
+     * Lifts a suspension.
+     *
+     * @return false when the account was not suspended
+     */
+    public boolean reinstate(Instant now) {
+        if (accountStatus != AccountStatus.SUSPENDED || deletedAt != null) {
+            return false;
+        }
+        accountStatus = AccountStatus.ACTIVE;
+        updatedAt = now;
+        return true;
+    }
+
     public boolean isEmailVerified() {
         return emailVerifiedAt != null;
     }

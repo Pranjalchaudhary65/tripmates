@@ -29,7 +29,10 @@ public enum EncryptedField {
     CHECKIN_LOCATION("checkins.location_ciphertext"),
 
     /** The exact point an SOS was raised from. */
-    SOS_LOCATION("sos_events.last_known_location_ciphertext");
+    SOS_LOCATION("sos_events.last_known_location_ciphertext"),
+
+    /** What a reporter wrote about the person they reported; read only by a moderator. */
+    REPORT_DETAILS("reports.details_ciphertext");
 
     private final String column;
 

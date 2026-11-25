@@ -161,6 +161,16 @@ public class SessionService {
         revokeInTransaction(userId, others, reason);
     }
 
+    /**
+     * Ends every session of the user, inside the caller's transaction: used
+     * when moderation takes an account out of use. As with
+     * {@link #revokeOthers}, make entity changes before calling this.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void revokeEverySession(UUID userId, SessionRevocationReason reason) {
+        revokeInTransaction(userId, families.findLiveIdsByUserId(userId), reason);
+    }
+
     /** The caller's live sessions, most recently used first. Only ever the caller's own. */
     public List<RefreshTokenFamily> list(SessionPrincipal caller) {
         return families.findTop100ByUserIdAndRevokedAtIsNullAndExpiresAtAfterOrderByLastUsedAtDesc(

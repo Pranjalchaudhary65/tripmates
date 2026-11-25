@@ -136,6 +136,8 @@ public class TripService {
             accounts.requireActive(caller);
             return queries.findPage(tripId, caller.userId())
                     .filter(TripService::isVisible)
+                    .filter(page -> page.card().hostedByViewer() || page.card().viewerRequest() != null
+                            || !queries.blockedBetween(caller.userId(), page.hostUserId()))
                     .orElseThrow(() -> new ApiProblemException(CommonProblem.NOT_FOUND));
         });
     }

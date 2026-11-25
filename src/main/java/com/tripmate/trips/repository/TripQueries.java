@@ -84,7 +84,9 @@ public class TripQueries {
                 .addValue("viewer", viewer)
                 .addValue("today", today);
         StringBuilder where = new StringBuilder("""
-                WHERE t.status = 'OPEN' AND t.start_date >= :today AND h.active AND t.host_user_id <> :viewer""")
+                WHERE t.status = 'OPEN' AND t.start_date >= :today AND h.active AND t.host_user_id <> :viewer
+                  AND NOT EXISTS (SELECT 1 FROM user_block_facts b
+                                  WHERE b.user_id = :viewer AND b.other_user_id = t.host_user_id)""")
                 .append("\n  AND ").append(DealBreakerRules.ALL_PASS);
         String distance = "NULL::double precision";
         if (filter.near() != null) {
@@ -256,6 +258,14 @@ public class TripQueries {
         }
         return names;
     }
+    /** Whether either of the two has blocked the other, from the view identity publishes. */
+    public boolean blockedBetween(UUID one, UUID other) {
+        Boolean blocked = jdbc.queryForObject("""
+                SELECT EXISTS (SELECT 1 FROM user_block_facts WHERE user_id = :one AND other_user_id = :other)""",
+                new MapSqlParameterSource("one", one).addValue("other", other), Boolean.class);
+        return Boolean.TRUE.equals(blocked);
+    }
+
     public boolean isActiveUser(UUID userId) {
         List<Boolean> rows = jdbc.queryForList("SELECT active FROM user_public_facts WHERE user_id = :user",
                 new MapSqlParameterSource("user", userId), Boolean.class);

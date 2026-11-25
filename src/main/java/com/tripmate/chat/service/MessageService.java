@@ -148,7 +148,8 @@ public class MessageService {
             }
 
             UUID recipientId = conversation.otherThan(senderId);
-            if (!conversation.isActive() || !queries.isActiveUser(recipientId)) {
+            if (!conversation.isActive() || !queries.isActiveUser(recipientId)
+                    || queries.blockedBetween(senderId, recipientId)) {
                 throw new ApiProblemException(ChatProblem.CONVERSATION_CLOSED);
             }
 
