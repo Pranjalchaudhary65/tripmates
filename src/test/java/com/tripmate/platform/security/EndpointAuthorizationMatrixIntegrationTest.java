@@ -213,6 +213,18 @@ class EndpointAuthorizationMatrixIntegrationTest {
                     actor -> SafetyApi.sosJson(UUID.randomUUID(), null, null)),
             Route.owned("POST", "/api/v1/sos/{sosId}/resolve", Setup.SOS_RAISED, "sosId", 200),
             Route.owned("GET", "/api/v1/trips/{tripId}/premortem", Setup.LEDGER, "tripId", 200),
+            Route.self("GET", "/api/v1/users/me/trust-score", Setup.SIGNED_IN, 200, Route.NO_BODY),
+            Route.owned("GET", "/api/v1/trips/{tripId}/reviews", Setup.LEDGER, "tripId", 200),
+            Route.owned("POST", "/api/v1/trips/{tripId}/reviews", Setup.TRIP_ENDED, "tripId", 201, actor -> """
+                    {"revieweeId":"%s","rating":5}""".formatted(actor.extra("companionId"))),
+            Route.self("GET", "/api/v1/users/me/reviews", Setup.SIGNED_IN, 200, Route.NO_BODY),
+            Route.self("POST", "/api/v1/blocks", Setup.MATCHED, 201, actor -> """
+                    {"matchId":"%s"}""".formatted(actor.extra("matchId"))),
+            Route.self("GET", "/api/v1/blocks", Setup.SIGNED_IN, 200, Route.NO_BODY),
+            Route.owned("DELETE", "/api/v1/blocks/{blockId}", Setup.BLOCKING, "blockId", 204),
+            Route.self("POST", "/api/v1/reports", Setup.MATCHED, 201, actor -> """
+                    {"matchId":"%s","reason":"OTHER","details":"Kept asking for my number"}"""
+                    .formatted(actor.extra("matchId"))),
             Route.admin("GET", "/api/v1/admin/users/{userId}", 200, Route.NO_BODY),
             Route.admin("GET", "/api/v1/admin/verifications", 200, Route.NO_BODY),
             Route.admin("POST", "/api/v1/admin/verifications/{verificationId}/decision", 200, actor -> """
@@ -501,7 +513,7 @@ class EndpointAuthorizationMatrixIntegrationTest {
                 HttpResponse<String> taken = new VibeApi(http).submit(token, VibeApi.FIRST_OPTIONS);
                 assertThat(taken.statusCode()).as(taken.body()).isEqualTo(200);
             }
-            case HOSTING, HOSTING_REQUEST, IN_CONVERSATION, CONTACT_UNLOCKED, MATCHED, MEETUP_READY, MEETUP_PROPOSED,
+            case HOSTING, HOSTING_REQUEST, IN_CONVERSATION, CONTACT_UNLOCKED, MATCHED, BLOCKING, MEETUP_READY, MEETUP_PROPOSED,
                  MEETUP_STARTING, MEETUP_COMPLETED -> {
                 String tripId = new TripApi(http).open(token, TripApi.tripJson(TripApi.uniquePlace(), 2));
                 extras.put("tripId", tripId);
@@ -526,11 +538,17 @@ class EndpointAuthorizationMatrixIntegrationTest {
                                 conversationId);
                     }
                 }
+                if (setup == Setup.BLOCKING) {
+                    HttpResponse<String> blocked = http.postJson("/api/v1/blocks", """
+                            {"matchId":"%s"}""".formatted(extras.get("matchId")), "Authorization", "Bearer " + token);
+                    assertThat(blocked.statusCode()).as(blocked.body()).isEqualTo(201);
+                    extras.put("blockId", JsonPath.read(blocked.body(), "$.id"));
+                }
                 if (setup.ordinal() >= Setup.MEETUP_READY.ordinal()) {
                     prepareMeetup(setup, http, token, requesterHttp, requesterToken, tripId, extras);
                 }
             }
-            case LEDGER, LEDGER_SPENT, LEDGER_OWING, LEDGER_PAID_TO, LIVE_READY, LIVE_SHARING, SOS_RAISED ->
+            case LEDGER, LEDGER_SPENT, LEDGER_OWING, LEDGER_PAID_TO, LIVE_READY, LIVE_SHARING, SOS_RAISED, TRIP_ENDED ->
                     prepareLedger(setup, http, token, extras);
             case CAN_VOUCH, VOUCHING -> {
                 verification.reachSelfieMatch(email, token);
@@ -652,6 +670,8 @@ class EndpointAuthorizationMatrixIntegrationTest {
                 assertThat(raised.statusCode()).as(raised.body()).isEqualTo(201);
                 extras.put("sosId", JsonPath.read(raised.body(), "$.openSos.id"));
             }
+            case TRIP_ENDED -> jdbc.update("update trips set start_date = current_date - 5, "
+                    + "end_date = current_date - 2 where id = ?::uuid", tripId);
             default -> throw new IllegalArgumentException("Not a ledger setup: " + setup);
         }
     }
@@ -776,6 +796,8 @@ class EndpointAuthorizationMatrixIntegrationTest {
         CONTACT_UNLOCKED,
         /** Hosting a trip with an accepted companion; extras as IN_CONVERSATION plus matchId. */
         MATCHED,
+        /** Matched, and the owner has blocked the companion; extra blockId. */
+        BLOCKING,
         /** Matched, the video call confirmed by both, an emergency contact set, and a venue at the trip; extras venueId, meetupStart, venueLatitude, venueLongitude. */
         MEETUP_READY,
         /** Ready, and the companion has proposed a meet-up. */
@@ -797,7 +819,9 @@ class EndpointAuthorizationMatrixIntegrationTest {
         /** As LIVE_READY, sharing the trip with check-ins every 12 hours. */
         LIVE_SHARING,
         /** As LEDGER, with an SOS raised by the owner; extra sosId. */
-        SOS_RAISED
+        SOS_RAISED,
+        /** As LEDGER, the trip having ended two days ago, so its review window is open. */
+        TRIP_ENDED
     }
 
     /**
