@@ -111,15 +111,16 @@ dependencies.
 
 | Module | Owns tables | Depends on |
 |---|---|---|
-| `identity` | users, user_encryption_keys, identity_verifications, vouches, otp_codes, totp_backup_codes, refresh_token_families, login_history, emergency_contacts, upi_ids; publishes the read-only view user_public_facts for other modules' SQL | — (foundation) |
+| `identity` | users, user_encryption_keys, identity_verifications, vouches, user_blocks, otp_codes, totp_backup_codes, refresh_token_families, login_history, emergency_contacts, upi_ids; publishes the read-only views user_public_facts and user_block_facts for other modules' SQL | — (foundation) |
 | `vibe` | vibe_profiles, deal_breakers, vibe_quiz_drafts; publishes the read-only view deal_breaker_facts for matching | identity |
 | `trips` | trips, trip_members, match_score_cache; publishes the read-only views trip_facts and trip_member_facts for other modules' SQL | identity, vibe |
 | `chat` | conversations, chat_messages, moderation_flags | identity, trips |
 | `meetup` | meetups, meetup_checkins, meetup_feedback, verified_venues, video_call_confirmations | identity, trips |
 | `settlement` | trip_ledgers, ledger_transactions, ledger_entries, settlements, settlement_state_transitions, settlement_overdue_notices | identity, trips |
 | `safety` | itinerary_shares, checkins, sos_events | identity, trips |
-| `trust` | reviews, trust_score_events, trust_score_snapshots | identity, trips, settlement, safety |
-| `platform` | outbox_events, audit_log, consent_records, data_requests, blocks_reports | all (infra module, no business logic) |
+| `trust` | reviews, trust_score_events, trust_score_snapshots, trust_score_state | identity, trips (settlement, meet-up and chat reach it only through the outbox) |
+| `moderation` | reports | identity, trips |
+| `platform` | outbox_events, audit_log, consent_records, data_requests | all (infra module, no business logic) |
 
 `trust` is deliberately downstream of everything else: it only ever reacts
 to events other modules publish to the outbox. No module calls into
@@ -445,15 +446,18 @@ verification included).
   and nobody can decide their own (`ck_idverif_reviewer_not_self` backs the
   service check).
 
-**Outbox and append-only, open question.** "Append-only enforcement" above
-lists `outbox_events` among the tables with no `UPDATE` grant, but the table
-also carries `processed_at` and `attempts`, which the relay has to update.
-The outbox was created while building the verification tiers (they are its
-first writers); the relay and the grants arrive with the trust score
-scheduler, which has to settle this: either a separate
-`outbox_deliveries` table for the relay's bookkeeping, keeping
-`outbox_events` truly insert-only, or an explicit exception for those two
-columns. No grants are applied to it yet.
+**Outbox and append-only, settled (V20).** An event's *content* is
+append-only; the relay's *bookkeeping* is not, but it can only move
+forward. A trigger refuses DELETE and TRUNCATE outright, and any UPDATE
+that touches `aggregate_type`, `aggregate_id`, `event_type`, `payload` or
+`created_at`, clears or moves `processed_at` once set, or lowers
+`attempts`. A new `dead_at` marks an event given up on after
+`max-attempts` failures (`ck_outbox_settled_once`: never both). I chose
+this over a separate `outbox_deliveries` table because the relay's one
+query stays a partial-index scan (`idx_outbox_pending`) instead of an
+anti-join that grows with every event ever written, and what append-only
+is for, history nobody can rewrite, is still held by the database for
+every role.
 
 ```sql
 otp_codes
@@ -1723,6 +1727,56 @@ Snapshots exist so the "why is my score X" explainability and any future
 score-dispute investigation can see the component breakdown at a point in
 time, not just the current denormalized `users.trust_score`.
 
+**As built (trust score and reviews).** Where V21 and the code settle or
+depart from the spec above and the engine spec below:
+
+- **No response-rate input.** Scoring how often someone replies would cost
+  a person who stops answering someone they want to avoid, which is the
+  safety carve-out's own argument ("the safe exit must always be the
+  cheapest action"). `RESPONSE_RATE_SAMPLE` is not built; its 5% went to
+  reliability. Weights: verification 0.30, peer rating 0.30, completion
+  0.20, reliability 0.20.
+- **Components are 0-100.** Verification is `(tier points + vouch bonus) /
+  60 × 100`; peer rating maps the Bayesian 1-5 average to 0-100;
+  completion is `(finished + 1) / (finished + 2)`, so a new account starts
+  at 50; reliability is 100 minus fixed deductions. Each value is rounded
+  before it is weighted, so the points shown add up to the score exactly.
+- **Reliability instead of a ghost ratio.** "Ghosts / commitments" needs a
+  denominator from meet-up data, and trust must not read meet-up tables
+  (the comfort rating lives there). Instead each behaviour input already
+  published takes off fixed points that fade with age: meet-up no-show 20,
+  settlement ghosted as payer 15 or payee 8 (these three fade to half and
+  stay), late change of plan 8, strongly flagged chat message 10 (these
+  fade away). The "first two ghosts" nuance is dropped for one simple
+  floor.
+- **Vouch penalty:** 3 points per `VOUCH_PENALIZED`, fading, capped at 9,
+  taken off after the weighted sum. `VouchService.penalizeVouchersOf` is
+  called by `AccountModeration.suspend`.
+- **`trust_score_events`** carries `detail`, `related_id` and
+  `source_event_id` (UNIQUE, so a redelivered outbox event counts once)
+  instead of a free JSONB payload, and no `processed_at`: the queue is
+  `trust_score_state (user_id, dirty_since, computed_at)`. Every input
+  marks its user dirty; the job recomputes from all inputs, so arrival
+  order never matters. Scores older than a day are requeued (inputs
+  fade), and any active verified account with no state row is queued too,
+  which is how existing users got a score. Events and snapshots are
+  append-only by trigger; a snapshot is written only when the score or
+  breakdown changed.
+- **The prior mean is a fixed 3.5**, not recomputed monthly.
+- **Reviews:** only the host and companions still on the trip when it ended
+  review each other (a companion who stepped back for safety neither
+  reviews nor is reviewed, so stepping back cannot earn a retaliatory
+  rating). Window: the day after the last day until 14 days later, IST.
+  Hidden until both of a pair have written, or the window closes (a job
+  reveals what was written then). The two writers of a pair are
+  serialised by a transaction advisory lock. A trigger refuses edits and
+  deletes; only `visible_at` moves, once, and a comment may be erased (set
+  to null) for account deletion.
+- **The score is shown only to its owner** (`GET /users/me/trust-score`),
+  consistent with `user_public_facts`: other people meet it only as a
+  `min_trust_score` filter. Deal-breakers are checked live, never cached,
+  so a changed score takes effect on matching at once and the cached soft
+  score stays correct.
 ### 9. Platform (outbox, audit, compliance)
 
 ```sql
@@ -1822,6 +1876,29 @@ of people feeling unsafe around the same counterparty surfaces to a
 moderator the same way repeated harassment reports do, without ever
 touching that counterparty's public trust score.
 
+**As built (blocks and reports, V22).** Two tables instead of
+`blocks_reports`: a block is a relationship that can be lifted, a report is
+a case that must not be lost.
+
+- **`user_blocks`** (identity, next to vouches), published to other modules
+  as `user_block_facts` with both directions. A block hides two people from
+  each other: trips browse, trip detail and join requests (as the 404 of an
+  unknown trip) and chat (`conversation_closed`).
+- **`reports`** (new `moderation` module): reason from a fixed list,
+  details sealed under the reporter's key (`REPORT_DETAILS`), status
+  OPEN → ACTIONED or DISMISSED once, never deleted (trigger). One open
+  report per reporter about one person.
+- **Who:** only someone the caller was matched with (host or accepted
+  companion, whatever happened after) or travelled with, addressed by
+  `matchId` or `tripId` + `userId`; anything else is a 404, so neither
+  route probes accounts.
+- **Auto-suspend:** 3 different reporters within 30 days (dismissed
+  reports not counted), counted under the reported account's row lock.
+  Suspension ends every session and penalises active vouchers, once.
+- **Not built: the automatic REPORT on a SAFETY cancellation.** Every
+  SAFETY cancellation comes from the meet-up (a safety cancel or a low
+  comfort rating), so an automatic report would reveal the private comfort
+  rating to moderators. The person can report from the same screen.
 ---
 
 ## Trust Score Engine spec
