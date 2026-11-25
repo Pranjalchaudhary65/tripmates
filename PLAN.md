@@ -168,10 +168,11 @@ Deadline: 2026-11-30.
 - [x] Conflict pre-mortem display pre-trip
 
 ## Step 11a — Double-blind reviews + Trust Score Engine backend
-- [ ] reviews table (double-blind visibility logic)
-- [ ] outbox_events, trust_score_events, trust_score_snapshots tables
-- [ ] Trust Score scheduler (Bayesian peer rating, time decay, verification/completion/ghost/response components)
-- [ ] Block/report + auto-suspend thresholds
+- [x] reviews table (double-blind visibility logic)
+- [x] outbox_events, trust_score_events, trust_score_snapshots tables
+- [x] Trust Score scheduler (Bayesian peer rating, time decay, verification/completion/ghost/response components)
+      — response rate deliberately left out, see DESIGN.md §8 "As built (trust score and reviews)"
+- [x] Block/report + auto-suspend thresholds
 
 ## Step 11b — Reviews/Trust frontend
 - [ ] Review submission screen (double-blind, no peeking until both submit)

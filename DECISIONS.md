@@ -279,3 +279,13 @@ One line per commit: what I built, and the key decision behind it.
   location at 5 seconds and send the SOS without one after that, over
   waiting for a fix, because an SOS that never leaves the phone is worse
   than one without coordinates.
+- **Step 11a** — Built the outbox relay, the trust score engine, double-blind
+  reviews, and block/report with auto-suspend. Chose to keep outbox events
+  append-only by a column guard trigger (content never changes, delivery is
+  marked once) over a separate deliveries table, so the relay's query stays
+  a partial-index scan. Chose to recompute each score from all its inputs
+  off the request path, queued per user, over adding deltas per event, so
+  arrival order and redelivery can't skew it. Left out the response-rate
+  input and the automatic report on a safety cancellation, because one
+  would punish not replying to someone you want to avoid and the other
+  would show moderators the private comfort rating.
