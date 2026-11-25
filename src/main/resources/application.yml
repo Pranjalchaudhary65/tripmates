@@ -191,6 +191,25 @@ tripmate:
     # registers its own EmergencyAlertSender; an unknown value stops startup.
     alert-sender: ${MEETUP_ALERT_SENDER:mailbox}
 
+  settlement:
+    # Per account: expenses, reversals and settlement actions together; and
+    # the settle-up screen with its history.
+    write-limit:
+      capacity: 120
+      period: 1h
+    read-limit:
+      capacity: 600
+      period: 10m
+    # A suggested payment still not marked as sent this long after the trip
+    # ended, or a payment marked as sent and not confirmed this long, counts
+    # as ghosting the settlement (one trust input per trip and role).
+    overdue-after: 7d
+    # A payee's UPI ID changed this recently is pointed out to the payer.
+    upi-change-warning: 48h
+    recent-expenses: 50
+    job-interval: 1h
+    job-batch: 200
+
   matching:
     # Which MatchScorer computes the soft score. "rule-based" (the default) is a
     # fixed weighted comparison that needs no API key. Deal-breakers are hard

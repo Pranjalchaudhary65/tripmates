@@ -88,6 +88,10 @@ tripmate:
     job-interval: 1000d
     alert-sender: mailbox
 
+  settlement:
+    # Tests run the overdue sweep themselves, against the shared clock.
+    job-interval: 1000d
+
   storage:
     # Under target/, so a test run never writes into the real uploads/.
     local-root: target/test-uploads
