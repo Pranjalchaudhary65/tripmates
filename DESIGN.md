@@ -111,12 +111,12 @@ dependencies.
 
 | Module | Owns tables | Depends on |
 |---|---|---|
-| `identity` | users, user_encryption_keys, identity_verifications, vouches, otp_codes, totp_backup_codes, refresh_token_families, login_history, emergency_contacts; publishes the read-only view user_public_facts for other modules' SQL | — (foundation) |
+| `identity` | users, user_encryption_keys, identity_verifications, vouches, otp_codes, totp_backup_codes, refresh_token_families, login_history, emergency_contacts, upi_ids; publishes the read-only view user_public_facts for other modules' SQL | — (foundation) |
 | `vibe` | vibe_profiles, deal_breakers, vibe_quiz_drafts; publishes the read-only view deal_breaker_facts for matching | identity |
 | `trips` | trips, trip_members, match_score_cache; publishes the read-only views trip_facts and trip_member_facts for other modules' SQL | identity, vibe |
 | `chat` | conversations, chat_messages, moderation_flags | identity, trips |
 | `meetup` | meetups, meetup_checkins, meetup_feedback, verified_venues, video_call_confirmations | identity, trips |
-| `settlement` | ledger_entries, settlements, settlement_state_transitions, expenses, expense_shares | identity, trips |
+| `settlement` | trip_ledgers, ledger_transactions, ledger_entries, settlements, settlement_state_transitions, settlement_overdue_notices | identity, trips |
 | `safety` | itinerary_shares, checkins, sos_events | identity, trips |
 | `trust` | reviews, trust_score_events, trust_score_snapshots | identity, trips, settlement, safety |
 | `platform` | outbox_events, audit_log, consent_records, data_requests, blocks_reports | all (infra module, no business logic) |
@@ -1492,6 +1492,70 @@ settlement that skipped `MARKED_PAID` is rejected; `from_user_id` calling
 confirm is rejected with zero `ledger_entries` written; two concurrent
 confirm calls on the same settlement produce exactly one `ledger_entries`
 pair (optimistic lock + idempotency key), not two.
+
+**As built (settlement).** What the settlement module added or changed
+(`V17`-`V18`), with the reason for each departure from the schema above:
+
+- **The lock is the meet-up's.** The ledger opens once the host has at
+  least one companion `LOCKED` through the meet-up gate; there is no second
+  lock and no deposit. Trips exposes `TripCrew` (no endpoint): the host plus
+  every companion ever locked in, with whether they are still on the trip.
+  Travellers can add expenses; a companion who stepped back later can still
+  see the ledger and settle what is theirs; anyone else gets 404.
+- **Money is whole paise in `BIGINT`, not `NUMERIC(12,2)`.** Neither is
+  floating point, but integer paise leave no scale to get wrong in the
+  application, splits are exact integer arithmetic, and the JSON carries
+  integers. Requests are read as exact decimals so `1250.5` is refused
+  rather than truncated. `currency` stays, CHECKed to `INR`.
+- **Expenses are ledger transactions, not mutable rows.** `expenses` /
+  `expense_shares` with a bulk-updated `settled_at` became a
+  `ledger_transactions` header (`kind` `EXPENSE`, `EXPENSE_REVERSAL` or
+  `SETTLEMENT`) with its legs in `ledger_entries`: the payer is DEBITED the
+  amount, each sharer CREDITED their share; a net balance is
+  `SUM(debit) - SUM(credit)` (positive = owed to them). A correction is a
+  reversal (every leg turned round, `reverses_id` UNIQUE so once only); a
+  confirmed payment debits the payer and credits the payee. "Settled" is
+  read from the balances, so nothing is ever updated.
+- **Double entry is held by the database.** A deferred constraint trigger
+  refuses to commit a transaction with fewer than two legs, unequal debits
+  and credits, or a total that differs from its header. A composite foreign
+  key keeps every leg on its transaction's trip.
+- **Append-only by trigger as well as by grant.** The app connects as the
+  table owner, which a REVOKE cannot restrict, so `ledger_entries`,
+  `ledger_transactions`, `settlement_state_transitions` and
+  `settlement_overdue_notices` carry a BEFORE UPDATE/DELETE/TRUNCATE trigger
+  that refuses every role. The REVOKE from PUBLIC is in place for when the
+  app connects as a separate role (to be split at deploy).
+- **Idempotency** lives on the transaction header,
+  `UNIQUE (recorded_by_user_id, idempotency_key)` plus a SHA-256 request
+  fingerprint: an expense's key is its client-chosen `clientExpenseId`, a
+  reused ID with other details is `409 expense_id_reused`. A confirmed
+  settlement's key is derived from its ID, and `settlement_id` is UNIQUE, so
+  a settlement reaches the ledger once however many confirms race.
+- **One write at a time per trip.** Every write locks the trip's
+  `trip_ledgers` row first, then works the plan out again. `@Version` on
+  `settlements` stays as the second guard (tested on its own).
+- **Plan, held amounts and `VOIDED`.** After every write the planner runs the
+  debt simplification on the ledger balances, with `MARKED_PAID` and
+  `DISPUTED` settlements holding their amounts out (money may have moved,
+  or someone says it did not). A `PROPOSED` settlement that still matches the
+  new plan exactly is kept; any other is set to the new terminal state
+  `VOIDED` (reason `PLAN_REPLACED`, no actor) and replaced.
+  `settlement_state_transitions.from_status` is null for creation.
+- **Disputes** may come from either person on an open settlement. The amount
+  stays held out of the plan and a `SETTLEMENT_DISPUTED` outbox event asks a
+  moderator to look; resolving one is a new settlement, never an edit.
+- **UPI.** The payee's UPI ID lives in identity (`upi_ids`, `V17`), AES-GCM
+  under their key, validated to `name@bank`. The `upi://pay` link is built
+  for the payer at read time instead of stored in `upi_deep_link`, so a
+  changed ID never leaves a stale link behind; an ID changed in the last 48
+  hours is pointed out. No UPI ID means no link and "ask in chat".
+- **Ghosting a settlement** is a trust input written to the outbox
+  (`SETTLEMENT_OVERDUE`, role `PAYER` or `PAYEE`): a suggested payment still
+  not marked as sent 7 days after the trip ended (and 7 days after it was
+  suggested), or a payment marked as sent and not confirmed for 7 days. Once
+  per trip, person and role (`settlement_overdue_notices`). Settlement never
+  calls the trust score; a test pins its one trust method.
 
 ### 7. Live Trip Mode & Safety
 
