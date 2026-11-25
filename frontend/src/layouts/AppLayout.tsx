@@ -82,6 +82,9 @@ function SessionNav() {
       <NavLink to="/account/emergency-contact" className={navLinkClassName}>
         Emergency contact
       </NavLink>
+      <NavLink to="/account/upi-id" className={navLinkClassName}>
+        UPI ID
+      </NavLink>
       <NavLink to="/account/security" className={navLinkClassName}>
         Security
       </NavLink>

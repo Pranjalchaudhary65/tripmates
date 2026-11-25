@@ -161,9 +161,14 @@ function StageBody({ match, act, pending }: { match: Match; act: Runner; pending
       return (
         <div className="rounded-md border border-teal-200 bg-teal-50 px-4 py-4 text-teal-900">
           <p>You met {other} in person and you both felt comfortable. Your trip is locked.</p>
-          <Link to="/messages" className="mt-3 inline-block font-medium text-teal-700 underline">
-            Contact details are now in your chat
-          </Link>
+          <div className="mt-3 flex flex-wrap gap-4">
+            <Link to="/messages" className="font-medium text-teal-700 underline">
+              Contact details are now in your chat
+            </Link>
+            <Link to={`/trips/${match.trip.id}/settle-up`} className="font-medium text-teal-700 underline">
+              Shared expenses and settle-up
+            </Link>
+          </div>
         </div>
       );
     case 'VIDEO_CALL':

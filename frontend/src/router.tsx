@@ -10,6 +10,7 @@ import { EmergencyContactPage } from './pages/EmergencyContactPage';
 import { HomePage } from './pages/HomePage';
 import { HostedTripsPage } from './pages/HostedTripsPage';
 import { JoinRequestsPage } from './pages/JoinRequestsPage';
+import { LedgerHistoryPage } from './pages/LedgerHistoryPage';
 import { LoginPage } from './pages/LoginPage';
 import { MatchPage } from './pages/MatchPage';
 import { NotFoundPage } from './pages/NotFoundPage';
@@ -21,6 +22,8 @@ import { SignupPage } from './pages/SignupPage';
 import { TripBrowsePage } from './pages/TripBrowsePage';
 import { TripCreatePage } from './pages/TripCreatePage';
 import { TripDetailPage } from './pages/TripDetailPage';
+import { TripLedgerPage } from './pages/TripLedgerPage';
+import { UpiIdPage } from './pages/UpiIdPage';
 import { VerificationPage } from './pages/VerificationPage';
 import { VibeProfilePage } from './pages/VibeProfilePage';
 import { VibeQuizPage } from './pages/VibeQuizPage';
@@ -63,11 +66,14 @@ export const routes: RouteObject[] = [
           { path: 'trips/mine', element: <HostedTripsPage /> },
           { path: 'trips/requests', element: <JoinRequestsPage /> },
           { path: 'trips/:tripId', element: <TripDetailPage /> },
+          { path: 'trips/:tripId/settle-up', element: <TripLedgerPage /> },
+          { path: 'trips/:tripId/settle-up/history', element: <LedgerHistoryPage /> },
           { path: 'messages', element: <ConversationsPage /> },
           { path: 'messages/:conversationId', element: <ConversationPage /> },
           { path: 'matches/:matchId', element: <MatchPage /> },
           { path: 'matches/:matchId/check-in', element: <CheckInPage /> },
           { path: 'account/emergency-contact', element: <EmergencyContactPage /> },
+          { path: 'account/upi-id', element: <UpiIdPage /> },
           {
             element: <RequireTier minimum="SELFIE_MATCH" />,
             children: [{ path: 'account/vouches', element: <VouchPage /> }],
