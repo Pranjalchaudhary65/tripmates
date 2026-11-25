@@ -313,6 +313,9 @@ tripmate:
       emergency-contact:
         capacity: 20
         period: 1h
+      upi-id:
+        capacity: 20
+        period: 1h
       max-active-vouches: 5
     two-factor:
       # Shown by authenticator apps next to the code; must not contain ':'.

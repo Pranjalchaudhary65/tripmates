@@ -18,12 +18,13 @@ import java.util.Objects;
  * @param profilePhoto     replacing the profile photo
  * @param vouch            vouching for someone
  * @param emergencyContact setting or removing the emergency contact
+ * @param upiId            setting or removing the UPI ID others pay the user at
  * @param maxActiveVouches how many people one account can vouch for at once
  */
 @ConfigurationProperties("tripmate.identity.verification-limits")
 public record VerificationLimitProperties(RateLimit phoneCode, RateLimit phoneConfirm, RateLimit selfieChallenge,
                                           RateLimit selfieSubmission, RateLimit profilePhoto, RateLimit vouch,
-                                          RateLimit emergencyContact, int maxActiveVouches) {
+                                          RateLimit emergencyContact, RateLimit upiId, int maxActiveVouches) {
 
     public VerificationLimitProperties {
         String prefix = "tripmate.identity.verification-limits.";
@@ -34,6 +35,7 @@ public record VerificationLimitProperties(RateLimit phoneCode, RateLimit phoneCo
         Objects.requireNonNull(profilePhoto, prefix + "profile-photo is required");
         Objects.requireNonNull(vouch, prefix + "vouch is required");
         Objects.requireNonNull(emergencyContact, prefix + "emergency-contact is required");
+        Objects.requireNonNull(upiId, prefix + "upi-id is required");
         if (maxActiveVouches < 1) {
             throw new IllegalArgumentException(prefix + "max-active-vouches must be positive");
         }

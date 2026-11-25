@@ -17,7 +17,10 @@ public enum EncryptedField {
     EMERGENCY_CONTACT_PHONE("emergency_contacts.phone_ciphertext"),
 
     /** A private note a user keeps about a meet-up, sealed under their own key. */
-    MEETUP_PRIVATE_NOTE("meetup.private_note");
+    MEETUP_PRIVATE_NOTE("meetup.private_note"),
+
+    /** The UPI ID a user wants to be paid at; often their phone number with a bank suffix. */
+    UPI_ID("upi_ids.vpa_ciphertext");
 
     private final String column;
 
