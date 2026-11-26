@@ -134,6 +134,9 @@ const SERVER_WORDED_CODES: ReadonlySet<string> = new Set([
   'invalid_reason',
   'invalid_details',
   'already_reported',
+  'invalid_decision',
+  'report_closed',
+  'cannot_moderate_self',
 ]);
 
 /**
