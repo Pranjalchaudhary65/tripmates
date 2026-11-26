@@ -185,7 +185,7 @@ Deadline: 2026-11-30.
 - [x] PII masking in logs verified end-to-end
 
 ## Step 12b — Admin moderation panel frontend
-- [ ] Admin moderation panel: verification queue, reports, audit log view, data requests
+- [x] Admin moderation panel: verification queue, reports, audit log view, data requests
 
 ## Step 13 — CI/CD & hardening pass
 - [ ] GitHub Actions: build, test (Testcontainers), gitleaks, OWASP dependency-check, Trivy on image

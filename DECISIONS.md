@@ -314,3 +314,11 @@ One line per commit: what I built, and the key decision behind it.
   report accuses the other person and counts toward auto-suspend, and to
   raise no flag on a low comfort rating, because naming who stepped back
   after a completed meet-up would reveal how they rated it.
+- **Step 12b** — Built the moderation panel: the report queue with take
+  action, dismiss and an explicit suspend, account suspend and reinstate,
+  the audit log with an ID filter and the integrity check, and data
+  requests by status, all under one admin layout. Chose a confirm step on
+  every closing or suspending action over one-click buttons, because a
+  closed report can't be reopened and a suspension ends someone's sessions,
+  and chose to re-read the account after a suspend or reinstate over
+  trusting the 204, because the server answers 204 even when nothing changed.
