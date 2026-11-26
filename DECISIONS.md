@@ -306,3 +306,11 @@ One line per commit: what I built, and the key decision behind it.
   Chose to seal exports into the database under the user's own key over
   writing files, so deleting the account destroys a waiting export too and
   no export can ever be served through a media link.
+- **Step 12a, follow-up** — Settled two trust and moderation questions.
+  Confirmed no reply-based input in the trust score, because scoring
+  replies would punish going quiet on someone you want to avoid. Chose to
+  raise an ID-only moderation flag on a safety cancellation (who, meet-up,
+  trip, time) over the automatic report DESIGN first asked for, because a
+  report accuses the other person and counts toward auto-suspend, and to
+  raise no flag on a low comfort rating, because naming who stepped back
+  after a completed meet-up would reveal how they rated it.

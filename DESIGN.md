@@ -1731,12 +1731,16 @@ time, not just the current denormalized `users.trust_score`.
 **As built (trust score and reviews).** Where V21 and the code settle or
 depart from the spec above and the engine spec below:
 
-- **No response-rate input.** Scoring how often someone replies would cost
-  a person who stops answering someone they want to avoid, which is the
-  safety carve-out's own argument ("the safe exit must always be the
-  cheapest action"). `RESPONSE_RATE_SAMPLE` is not built; its 5% went to
-  reliability. Weights: verification 0.30, peer rating 0.30, completion
-  0.20, reliability 0.20.
+- **No response-rate input — settled, not deferred.** Scoring how often
+  someone replies would cost a person who stops answering someone they
+  want to avoid, which is the safety carve-out's own argument ("the safe
+  exit must always be the cheapest action"). `RESPONSE_RATE_SAMPLE` is not
+  built and will not be: no reply-based signal (reply rate, reply time,
+  read receipts) is a trust input. Its 5% went to reliability. Weights:
+  verification 0.30, peer rating 0.30, completion 0.20, reliability 0.20.
+  The `RESPONSE_RATE_SAMPLE` entry and `response_rate_component` in the
+  engine spec below are kept only as the record of what was decided
+  against.
 - **Components are 0-100.** Verification is `(tier points + vouch bonus) /
   60 × 100`; peer rating maps the Bayesian 1-5 average to 0-100;
   completion is `(finished + 1) / (finished + 2)`, so a new account starts
@@ -1875,7 +1879,9 @@ A `SAFETY` cancellation in `trip_members` auto-inserts a `REPORT` row here
 and auto-suspend machinery instead of building a second one, so a pattern
 of people feeling unsafe around the same counterparty surfaces to a
 moderator the same way repeated harassment reports do, without ever
-touching that counterparty's public trust score.
+touching that counterparty's public trust score. (Superseded: a safety
+cancellation raises an ID-only moderation flag instead of a report — see
+"As built" below.)
 
 **As built (blocks and reports, V22).** Two tables instead of
 `blocks_reports`: a block is a relationship that can be lifted, a report is
@@ -1896,10 +1902,26 @@ a case that must not be lost.
 - **Auto-suspend:** 3 different reporters within 30 days (dismissed
   reports not counted), counted under the reported account's row lock.
   Suspension ends every session and penalises active vouchers, once.
-- **Not built: the automatic REPORT on a SAFETY cancellation.** Every
-  SAFETY cancellation comes from the meet-up (a safety cancel or a low
-  comfort rating), so an automatic report would reveal the private comfort
-  rating to moderators. The person can report from the same screen.
+- **A safety cancellation raises a moderation flag, not a report.** No
+  automatic `REPORT` row: a report names the other person as reported and
+  feeds the auto-suspend count, which is a judgement the person who stepped
+  back never made. Instead, calling a meet-up off with `SAFETY` publishes
+  `SAFETY_MEETUP_CANCELLED` (aggregate `SAFETY_REPORT`, the meet-up ID) in
+  the same transaction as the cancellation, through
+  `MeetupModerationEvents`, the same way an SOS publishes
+  `SAFETY_SOS_RAISED`. Its payload is exactly `userId` (who cancelled),
+  `meetupId`, `tripId` and `cancelledAt`: never the comfort rating, a note,
+  a reason or anything about the rating. The publishing method takes three
+  UUIDs and an `Instant` and nothing else (pinned by
+  `MeetupModuleBoundaryTest`); an integration test checks the stored
+  payload has exactly those four keys and no rating. Trust's handler does
+  not accept the type, so the flag costs nobody anything. A match stopped
+  by a low comfort rating raises **no** flag: "who stepped back" after a
+  completed meet-up would itself tell a moderator that person rated it
+  below the threshold. Either person can still file a report themselves
+  from the same screen. There is no moderator view of the safety flags yet
+  (neither SOS nor safety cancellations); they sit in the outbox as the
+  record, and the admin panel reads reports.
 **As built (compliance, V23).**
 
 - **Audit log.** A BEFORE INSERT trigger fills `sequence_no` (gapless),
@@ -1975,7 +1997,8 @@ module's outbox consumer, never computed inline):
    cancellation record at all. **Never** emitted for
    `cancellation_type = 'SAFETY'` — see the carve-out below.
 5. `RESPONSE_RATE_SAMPLE` — periodic sample of (messages replied to /
-   messages received) in chat.
+   messages received) in chat. **Decided against, not built** — see §8
+   "As built (trust score and reviews)".
 6. `VOUCH_PENALIZED` — a user this account actively vouches for
    (`vouches.voucher_user_id = this user`) gets suspended/banned, or
    crosses the auto-suspend report threshold. See "Vouching" below.
@@ -2020,7 +2043,7 @@ weighted_sum =
   + 0.30 * bayesian_peer_rating_component
   + 0.20 * completion_rate_component     -- trips completed / trips committed to
   + 0.15 * ghost_penalty_component       -- 100 - (ghosts / commitments * 100)
-  + 0.05 * response_rate_component
+  + 0.05 * response_rate_component     -- decided against; as built, this 5% is in reliability
 
 score = clamp(0, 100, weighted_sum - vouch_penalty_deduction)
 ```
