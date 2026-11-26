@@ -1916,12 +1916,16 @@ a case that must not be lost.
   `MeetupModuleBoundaryTest`); an integration test checks the stored
   payload has exactly those four keys and no rating. Trust's handler does
   not accept the type, so the flag costs nobody anything. A match stopped
-  by a low comfort rating raises **no** flag: "who stepped back" after a
-  completed meet-up would itself tell a moderator that person rated it
-  below the threshold. Either person can still file a report themselves
-  from the same screen. There is no moderator view of the safety flags yet
-  (neither SOS nor safety cancellations); they sit in the outbox as the
-  record, and the admin panel reads reports.
+  by a low comfort rating raises **no** flag — a settled decision, not a
+  gap: "who stepped back" after a completed meet-up would itself tell a
+  moderator that person rated it below the threshold, and no flag, report
+  or moderator view may carry anything derived from the comfort rating.
+  Either person can still file a report themselves from the same screen.
+  There is no moderator view of the safety flags yet (neither SOS nor
+  safety cancellations); they sit in the outbox as the record, and the
+  admin panel reads reports. A moderator view of both is planned (PLAN,
+  CI/CD & hardening pass); it shows only what the flags carry (who, which
+  SOS or meet-up, which trip, when) and never any comfort-rating detail.
 **As built (compliance, V23).**
 
 - **Audit log.** A BEFORE INSERT trigger fills `sequence_no` (gapless),

@@ -322,3 +322,9 @@ One line per commit: what I built, and the key decision behind it.
   closed report can't be reopened and a suspension ends someone's sessions,
   and chose to re-read the account after a suspend or reinstate over
   trusting the 204, because the server answers 204 even when nothing changed.
+- **Step 12b, follow-up** — Confirmed that a low comfort rating raises no
+  moderation flag, because naming who stepped back after a completed
+  meet-up would reveal the private rating. Chose to plan a moderator view
+  of the SOS and safety-cancellation flags that shows only who, what, which
+  trip and when over leaving the flags unread, so a pattern of people
+  feeling unsafe reaches a moderator without any rating detail.
