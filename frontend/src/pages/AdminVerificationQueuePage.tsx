@@ -12,7 +12,7 @@ const WHEN = new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 
  * beside the profile photo it was compared against. Images come through
  * links that expire in minutes; reloading the page fetches fresh ones. A
  * decision is approve or reject only: nothing a reviewer types reaches the
- * user. Reports join this queue once reporting exists.
+ * user. Reports have their own queue.
  */
 export function AdminVerificationQueuePage() {
   const [page, setPage] = useState(0);

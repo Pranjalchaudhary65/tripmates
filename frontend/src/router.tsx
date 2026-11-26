@@ -1,9 +1,13 @@
-import { createBrowserRouter, type RouteObject } from 'react-router';
+import { createBrowserRouter, Navigate, type RouteObject } from 'react-router';
 import { GuestOnly, RequireAdmin, RequireSession, RequireTier } from './auth/guards';
+import { AdminLayout } from './layouts/AdminLayout';
 import { AppLayout } from './layouts/AppLayout';
 import { CheckInPage } from './pages/CheckInPage';
 import { ConversationPage } from './pages/ConversationPage';
 import { ConversationsPage } from './pages/ConversationsPage';
+import { AdminAuditPage } from './pages/AdminAuditPage';
+import { AdminDataRequestsPage } from './pages/AdminDataRequestsPage';
+import { AdminReportsPage } from './pages/AdminReportsPage';
 import { AdminUserLookupPage } from './pages/AdminUserLookupPage';
 import { AdminVerificationQueuePage } from './pages/AdminVerificationQueuePage';
 import { BlockedPage } from './pages/BlockedPage';
@@ -91,8 +95,17 @@ export const routes: RouteObject[] = [
           {
             element: <RequireAdmin />,
             children: [
-              { path: 'admin/users', element: <AdminUserLookupPage /> },
-              { path: 'admin/verifications', element: <AdminVerificationQueuePage /> },
+              {
+                element: <AdminLayout />,
+                children: [
+                  { path: 'admin', element: <Navigate to="/admin/reports" replace /> },
+                  { path: 'admin/reports', element: <AdminReportsPage /> },
+                  { path: 'admin/users', element: <AdminUserLookupPage /> },
+                  { path: 'admin/verifications', element: <AdminVerificationQueuePage /> },
+                  { path: 'admin/audit', element: <AdminAuditPage /> },
+                  { path: 'admin/data-requests', element: <AdminDataRequestsPage /> },
+                ],
+              },
             ],
           },
         ],
