@@ -191,6 +191,9 @@ Deadline: 2026-11-30.
 - [ ] GitHub Actions: build, test (Testcontainers), gitleaks, OWASP dependency-check, Trivy on image
 - [ ] README: architecture diagram, Design Decisions & Trade-offs, OWASP Top 10 checklist
 - [ ] Full authorization-test audit across every endpoint
+- [ ] Moderator view of safety flags (SOS raised, safety cancellation): who, which SOS/meet-up, trip, time — never any comfort-rating detail
+- [ ] User screens for consents, data export and account deletion (backend from 12a)
+- [ ] MapStruct mappers for the 12a admin/compliance response DTOs
 - [ ] Deploy to Render/Railway
 
 Any step above that turns out too large for one reply gets split further
