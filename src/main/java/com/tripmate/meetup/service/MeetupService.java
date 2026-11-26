@@ -106,6 +106,8 @@ public class MeetupService {
 
     private final MeetupTrustEvents trustEvents;
 
+    private final MeetupModerationEvents moderationEvents;
+
     private final ImageSanitizer images;
 
     private final ObjectStorage storage;
@@ -126,7 +128,8 @@ public class MeetupService {
                          EmergencyContactService emergencyContacts, VideoCallConfirmationRepository videoCalls,
                          MeetupRepository meetups, MeetupCheckinRepository checkins, MeetupFeedbackRepository feedback,
                          VenueRepository venues, MeetupQueries queries, DaylightRules daylight,
-                         MeetupTrustEvents trustEvents, ImageSanitizer images, ObjectStorage storage,
+                         MeetupTrustEvents trustEvents, MeetupModerationEvents moderationEvents,
+                         ImageSanitizer images, ObjectStorage storage,
                          UserDataCipher cipher, RateLimiter rateLimiter, MeetupProperties properties,
                          PlatformTransactionManager transactionManager, Clock clock) {
         this.accounts = accounts;
@@ -140,6 +143,7 @@ public class MeetupService {
         this.queries = queries;
         this.daylight = daylight;
         this.trustEvents = trustEvents;
+        this.moderationEvents = moderationEvents;
         this.images = images;
         this.storage = storage;
         this.cipher = cipher;
@@ -243,8 +247,9 @@ public class MeetupService {
 
     /**
      * Calls the meet-up off. SAFETY needs no reason, costs nothing, and ends
-     * the match for both; it never reaches the trust score. CONVENIENCE
-     * leaves the match open for another proposal, and only a confirmed
+     * the match for both; it never reaches the trust score, and it raises a
+     * moderation flag naming only who, which meet-up and trip, and when.
+     * CONVENIENCE leaves the match open for another proposal, and only a confirmed
      * meet-up cancelled close to its start is a trust input.
      */
     public MatchView cancel(SessionPrincipal caller, UUID matchId, MeetupCancellation type) {
@@ -256,6 +261,7 @@ public class MeetupService {
             meetups.save(meetup);
             if (type == MeetupCancellation.SAFETY) {
                 memberships.releaseForSafety(match.memberId(), now);
+                moderationEvents.safetyCancellation(caller.userId(), meetup.getId(), match.tripId(), now);
             } else if (wasConfirmed && meetup.getScheduledAt().minus(properties.lateCancelWithin()).isBefore(now)) {
                 trustEvents.lateConvenienceCancel(caller.userId(), meetup.getId());
             }
