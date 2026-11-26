@@ -2,6 +2,7 @@ package com.tripmate.trust;
 
 import com.tripmate.chat.service.ChatTrustEvents;
 import com.tripmate.identity.service.TrustInputEvents;
+import com.tripmate.meetup.service.MeetupModerationEvents;
 import com.tripmate.meetup.service.MeetupTrustEvents;
 import com.tripmate.safety.service.SafetyModerationEvents;
 import com.tripmate.settlement.service.SettlementTrustEvents;
@@ -61,7 +62,8 @@ class TrustModuleBoundaryTest {
                 TrustInputEvents.VOUCH_REVOKED, TrustInputEvents.VOUCH_PENALIZED,
                 MeetupTrustEvents.MEETUP_NO_SHOW, MeetupTrustEvents.MEETUP_LATE_CANCEL,
                 SettlementTrustEvents.SETTLEMENT_OVERDUE, ChatTrustEvents.CHAT_MESSAGE_FLAGGED);
-        assertThat(accepted).doesNotContainKey(SafetyModerationEvents.SOS_RAISED);
+        assertThat(accepted).doesNotContainKey(SafetyModerationEvents.SOS_RAISED)
+                .doesNotContainKey(MeetupModerationEvents.SAFETY_MEETUP_CANCELLED);
         assertThat(accepted.keySet()).noneMatch(type -> type.startsWith("SAFETY") || type.contains("COMFORT")
                 || type.contains("DISPUTE"));
     }

@@ -1,5 +1,6 @@
 package com.tripmate.meetup;
 
+import com.tripmate.meetup.service.MeetupModerationEvents;
 import com.tripmate.meetup.service.MeetupTrustEvents;
 import org.junit.jupiter.api.Test;
 
@@ -8,6 +9,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
@@ -54,6 +56,21 @@ class MeetupModuleBoundaryTest {
         for (Method method : MeetupTrustEvents.class.getDeclaredMethods()) {
             assertThat(method.getParameterTypes()).as(method.getName()).containsOnly(UUID.class);
         }
+    }
+
+    /**
+     * The moderation flag for a safety cancellation names who, which meet-up
+     * and trip, and when. Its one method takes IDs and an instant only, so
+     * there is no parameter a rating, a note or a reason could travel in.
+     */
+    @Test
+    void theSafetyFlagCanCarryOnlyIdsAndATime() {
+        List<Method> published = Arrays.stream(MeetupModerationEvents.class.getDeclaredMethods())
+                .filter(method -> Modifier.isPublic(method.getModifiers()))
+                .toList();
+        assertThat(published).extracting(Method::getName).containsExactly("safetyCancellation");
+        assertThat(published.getFirst().getParameterTypes())
+                .containsExactly(UUID.class, UUID.class, UUID.class, Instant.class);
     }
     private static List<Path> filesOutsideMeetupMatching(Pattern pattern) throws IOException {
         try (Stream<Path> files = Files.walk(MAIN)) {

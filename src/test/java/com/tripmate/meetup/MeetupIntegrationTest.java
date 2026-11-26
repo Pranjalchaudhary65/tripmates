@@ -263,6 +263,47 @@ class MeetupIntegrationTest {
     }
 
     @Test
+    void aSafetyCancellationRaisesAModerationFlagWithOnlyWhoWhichMeetupAndWhen() {
+        Ladder ladder = Ladder.start(port, mailpit, jdbc).videoVerified().withEmergencyContacts().proposed()
+                .confirmed().startingIn(60);
+        String meetupId = jdbc.queryForObject("select id::text from meetups where member_id = ?::uuid",
+                String.class, ladder.matchId());
+        Instant before = Instant.now().minusSeconds(5);
+
+        stage(ladder.companionApi().cancel(ladder.companion().token(), ladder.matchId(), "SAFETY"));
+
+        List<Map<String, Object>> flags = jdbc.queryForList("select aggregate_type, aggregate_id::text as aggregate, "
+                + "payload::text as payload from outbox_events where event_type = 'SAFETY_MEETUP_CANCELLED' "
+                + "and aggregate_id = ?::uuid", meetupId);
+        assertThat(flags).hasSize(1);
+        assertThat(flags.getFirst()).containsEntry("aggregate_type", "SAFETY_REPORT");
+        String payload = (String) flags.getFirst().get("payload");
+        assertThat(JsonPath.<Map<String, Object>>read(payload, "$")).containsOnlyKeys("userId", "meetupId",
+                "tripId", "cancelledAt");
+        assertThat(JsonPath.<String>read(payload, "$.userId")).isEqualTo(ladder.companion().userId());
+        assertThat(JsonPath.<String>read(payload, "$.meetupId")).isEqualTo(meetupId);
+        assertThat(JsonPath.<String>read(payload, "$.tripId")).isEqualTo(ladder.tripId());
+        assertThat(Instant.parse(JsonPath.read(payload, "$.cancelledAt"))).isAfter(before);
+        assertThat(payload).doesNotContainIgnoringCase("rating").doesNotContainIgnoringCase("comfort")
+                .doesNotContainIgnoringCase("note");
+    }
+
+    @Test
+    void aLowComfortRatingRaisesNoFlagThatCouldRevealIt() {
+        Ladder ladder = Ladder.start(port, mailpit, jdbc).videoVerified().withEmergencyContacts().proposed()
+                .confirmed().startingIn(10).bothCheckedIn();
+        ladder.hostApi().rate(ladder.host().token(), ladder.matchId(), 4, null);
+
+        stage(ladder.companionApi().rate(ladder.companion().token(), ladder.matchId(), 1, "Made me uneasy"));
+
+        assertThat(jdbc.queryForObject("select count(*) from outbox_events where event_type = "
+                + "'SAFETY_MEETUP_CANCELLED' and payload ->> 'tripId' = ?", Integer.class, ladder.tripId())).isZero();
+        assertThat(jdbc.queryForList("select payload::text from outbox_events where payload ->> 'tripId' = ?",
+                String.class, ladder.tripId())).noneMatch(payload -> payload.toLowerCase().contains("rating")
+                || payload.contains("uneasy"));
+    }
+
+    @Test
     void aLateChangeOfPlanIsATrustInputAndAllowsANewProposal() {
         Ladder ladder = Ladder.start(port, mailpit, jdbc).videoVerified().withEmergencyContacts().proposed()
                 .confirmed().startingIn(120);
@@ -274,6 +315,9 @@ class MeetupIntegrationTest {
         assertThat(JsonPath.<String>read(cancelled.body(), "$.meetup.cancellation")).isEqualTo("CONVENIENCE");
         assertThat(jdbc.queryForObject("select count(*) from outbox_events where event_type = 'MEETUP_LATE_CANCEL' "
                 + "and aggregate_id = ?::uuid", Integer.class, ladder.host().userId())).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select count(*) from outbox_events where event_type = "
+                + "'SAFETY_MEETUP_CANCELLED' and payload ->> 'tripId' = ?", Integer.class, ladder.tripId()))
+                .as("a change of plan is not a safety flag").isZero();
         HttpResponse<String> again = ladder.hostApi().propose(ladder.host().token(), ladder.matchId(),
                 ladder.venueId(), ladder.firstAllowedStart());
         assertThat(again.statusCode()).as(again.body()).isEqualTo(201);
